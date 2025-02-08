@@ -3,6 +3,9 @@ library(tidyverse)
 library(ggrepel)
 library(dplyr)
 library(tibble)
+library(gt)
+library(webshot2)
+
 
 
 rm(list=ls())
@@ -200,6 +203,8 @@ subset(GOF_long,GOF_criteria %in% c("value.R2","value.mNSE","value.KGE")) %>%
   geom_line(aes(y = GOF_value, x = lambda, 
                       group = GOF_criteria, 
                       color = GOF_criteria))+
+  ggtitle(label = paste0("GOF by lambda for model ",model_name))+
+  
   scale_x_discrete(labels = c("1","2","3","4","5","6","7","8","min","1se"))+
   facet_wrap(~k, scales = "free")
 
@@ -219,6 +224,8 @@ ggplot(subset(GOF_long, GOF_criteria %in% c("value.R2", "value.mNSE", "value.KGE
   # Line plot (Secondary Y-axis)
   geom_line(aes(y = GOF_value * scale_factor, x = lambda, 
                 group = GOF_criteria, color = GOF_criteria), size = 1.2) +
+  ggtitle(label = paste0("GOF by lambda for model ",model_name))+
+  
   
   # Scale X-axis
   scale_x_discrete(labels = c("1","2","3","4","5","6","7","8","min","1se")) +
@@ -246,6 +253,7 @@ subset(GOF_long,GOF_criteria %in% c("value.MSE","value.MAE")) %>%
              group = GOF_criteria, 
              color = GOF_criteria))+
   geom_line()+
+  ggtitle(label = paste0("Errors by lambda for model ",model_name))+
   scale_x_discrete(labels = c("1","2","3","4","5","6","7","8","1se","min"))+
   facet_wrap(~k, scales = "free")
 
@@ -273,6 +281,8 @@ ggplot(subset(GOF_long, GOF_criteria %in% c("value.MSE","value.MAE"))) +
     name = "Number of Coefficients",  # Primary y-axis label
     sec.axis = sec_axis(~ . / scale_factor, name = "GOF estimates") # Secondary y-axis
   ) +
+  ggtitle(label = paste0("Errors by lambda for model ",model_name))+
+
   facet_wrap(~k, scales = "free") +
   theme_minimal() +
   theme(legend.position = "bottom")
@@ -398,4 +408,86 @@ ggplot(aes(x = qobs, y = residuals, color = lambda)) +
   geom_hline(yintercept=0)
 
 dev.off()
+
+
+### Create a table with the summary statistics of the 3 best lambdas -----
+lambdas_table <- c("lambda_4","lambda_5","lambda.1se")  #define lambdas that should be analyzed more deeply
+rows_table <- c("R2_mean","RMSE_mean","R2_SD","RMSE_SD","Number_Coefs", "value.lambda")
+
+summary_table <- matrix(data=NA, nrow =length(lambdas_table), ncol=(length(rows_table)))
+
+for (i in 1:length(lambdas_table)) {
+  # lambda <- paste0("Fold-",k)
+  y <- lambdas_table[i]
+  R2_vector <- GOF_df %>% 
+    subset(lambda==y, select = value.R2) %>% 
+    unlist(use.names = F)
+  R2_mean <- mean(R2_vector)
+  R2_SD <- sd(R2_vector)
+  
+  RMSE_vector <- GOF_df %>% 
+    subset(lambda==y, select = value.RMSE) %>% 
+    unlist(use.names = F)
+  RMSE_mean <- mean(RMSE_vector)
+  RMSE_SD <- sd(RMSE_vector)
+  
+  value.lambda <-  GOF_df %>% 
+    subset(lambda ==y & k == "Fold-1", select = value.lambda) %>% 
+    unlist(use.names = F)
+  
+  n_coefs <- GOF_df %>% 
+    subset(lambda ==y & k == "Fold-1", select = ncoefs_used)
+    
+  
+  vector <- c(R2_mean,RMSE_mean,R2_SD,RMSE_SD,n_coefs,value.lambda)%>% 
+    unlist(use.names = F)
+  
+  summary_table[i,] <- vector 
+  
+}
+summary_table <- as.data.frame(summary_table)
+colnames(summary_table) <- rows_table
+summary_table$name.lambda <- lambdas_table
+
+
+# Create a basic gt table
+gt_table <- gt(summary_table) %>%
+  tab_header(
+    title = "Summary statistics of the 3 best lambdas",
+    subtitle = paste0("Model: ",model_name)
+      ) %>%
+  fmt_number(
+    columns = c(R2_mean,RMSE_mean,R2_SD,RMSE_SD,value.lambda),
+    decimals = 2)    %>%
+  fmt_number(
+        columns = c(value.lambda),
+        decimals = 4
+  ) %>%
+  cols_label(
+    name.lambda = "Name of Lambda",
+    R2_mean = "R2 Mean",
+    RMSE_mean = "RMSE Mean",
+    R2_SD = "R2 SD",
+    RMSE_SD = "RMSE SD",
+    Number_Coefs = "Number of Coefficients",
+    value.lambda = "Value of Lambda"
+  ) %>%
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+    ),
+    locations = cells_column_labels(everything())
+  ) %>%
+  tab_footnote(
+    footnote = "SD = Standard Deviation between GOF values of 10 different CV-Folds",
+    locations = cells_title(groups = "title")
+  )
+
+gtsave(gt_table, paste0("results/",model_name,"/summary_table_lambdas.png"))
+# Print the table
+gt_table
+
+
+
+
 

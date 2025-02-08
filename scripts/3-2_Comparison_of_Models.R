@@ -3,7 +3,7 @@ library(ggplot2)
 
 rm(list=ls())
 
-model_name <- c("EN_LOO-1","EN-2","EN-3","EN_LOO-2","EN_KFCV-1")
+model_name <- c("EN_LOO-1","EN-2","ENO-1")
 dataset <- "lagged_TB" #TB = Tauchenbach
 
 #### Loading the optimal parameter of the models and store them as df -----

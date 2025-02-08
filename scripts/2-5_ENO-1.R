@@ -89,7 +89,7 @@ for (k in 1:10) {
   for (y in 1:10) {
     
     temp.fit <- cv.glmnet(x_train, y_train, type.measure="mse",
-                          alpha=1, family="gaussian")
+                          alpha=1, family="gaussian", nfolds = nrow(x_train))
     #setting nfolds = nrow(x_train) makes it a Leave-One-Out CV 
     
     lambdas <- temp.fit[["lambda"]][seq(1,81,by=10)]
@@ -124,10 +124,12 @@ for (k in 1:10) {
     
     kge <- hydroGOF::KGE(temp.predicted, y_test, j=1)
     
+    RMSE <- hydroGOF::rmse(temp.predicted, y_test)
+
     
     ## Store the GOF ------------
-    temp.GOF <- data.frame(alpha=1, lambda = lambdas[y], MSE=mse, fit.name=fit.name, 
-                           MAE = mae, R2=R2, mNSE=mNSE, KGE=kge)
+    temp.GOF <- data.frame(alpha=1, lambda = lambdas[y],  fit.name=fit.name, 
+                           MAE = mae,MSE=mse, RMSE = RMSE, R2=R2, mNSE=mNSE, KGE=kge)
     # GOF <- rbind(GOF, temp.GOF) #NTM brauch ich glaube nicht
     GOF_list[[paste0("Fold-",k)]][[lambda_names[y]]] <- temp.GOF
     
@@ -151,7 +153,7 @@ for (k in 1:10) {
 
   }
    fits_list[[paste0("Fold-",k)]] <- temp.fit #save the fits in a list for future explorations
-   
+   print(paste0("Fold ",k,"/10 finished"))
 }
 
 
@@ -170,24 +172,26 @@ save(GOF_list,file = paste0("results/",model_name,"/",model_name,"_",dataset,"_G
 save(fits_list,file = paste0("results/",model_name,"/",model_name,"_",dataset,"_fits_list.RData"))
 
 
+# 
+# GOF_df <- do.call(rbind, GOF_list)
+# GOF_long <- pivot_longer(GOF_df, cols = c("MSE","MAE","R2","mNSE","KGE") ,
+#                             names_to = "GOF_criteria", 
+#                             values_to = "GOF_value")
+# 
+# png(file=paste0("results/comparison_of_models/bar_plot_GOF_vs_models.png"),
+#     width = 1000, height = 600, units = "px")
+# 
+# GOF_long %>%
+#   filter(GOF_criteria %in% c("MSE","MAE","R2","mNSE","KGE")) %>%  # Keep only R2 and MAE
+#   ggplot(aes(x = fit.name, y = GOF_value, fill = fit.name)) +  
+#   geom_bar(stat = "identity", position = position_dodge()) +  # Bars side by side
+#   facet_wrap(~GOF_criteria, scales = "free") +  # Separate plots for R2 and MAE
+#   theme_minimal() +  
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x labels for readability
+#   labs(x = "Model name and GOF_criterium to selection of best parameters (alpha and lambda)"
+#        , y = "GOF Value", fill = "Alpha Value", title = "Comparison of R2 and MAE")
+# 
+# dev.off()
 
-GOF_df <- do.call(rbind, GOF_list)
-GOF_long <- pivot_longer(GOF_df, cols = c("MSE","MAE","R2","mNSE","KGE") ,
-                            names_to = "GOF_criteria", 
-                            values_to = "GOF_value")
 
-png(file=paste0("results/comparison_of_models/bar_plot_GOF_vs_models.png"),
-    width = 1000, height = 600, units = "px")
-
-GOF_long %>%
-  filter(GOF_criteria %in% c("MSE","MAE","R2","mNSE","KGE")) %>%  # Keep only R2 and MAE
-  ggplot(aes(x = fit.name, y = GOF_value, fill = fit.name)) +  
-  geom_bar(stat = "identity", position = position_dodge()) +  # Bars side by side
-  facet_wrap(~GOF_criteria, scales = "free") +  # Separate plots for R2 and MAE
-  theme_minimal() +  
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x labels for readability
-  labs(x = "Model name and GOF_criterium to selection of best parameters (alpha and lambda)"
-       , y = "GOF Value", fill = "Alpha Value", title = "Comparison of R2 and MAE")
-
-dev.off()
 
