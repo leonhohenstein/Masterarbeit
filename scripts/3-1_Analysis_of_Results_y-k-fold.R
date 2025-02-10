@@ -12,7 +12,7 @@ rm(list=ls())
 
 ### name the models and dataset of interest ------
 
-model_name <- c("ENO-1")
+model_name <- c("ENO-DT")
 dataset <- "lagged_TB" #TB = Tauchenbach
 
 
@@ -324,6 +324,11 @@ predictions_df[which(predictions_df$k == k &
 
 ##### Hydrographs of predicted vs. observed flows 
 
+if (file.exists(paste0("results/",model_name,"/hydrographs/"))){
+} else {
+  dir.create(file.path(paste0("results/",model_name,"/hydrographs/")))
+}
+
 for (nfold in 1:10) {
   for (lambda in lambda_names) {
 
@@ -453,7 +458,7 @@ summary_table$name.lambda <- lambdas_table
 # Create a basic gt table
 gt_table <- gt(summary_table) %>%
   tab_header(
-    title = "Summary statistics of the 3 best lambdas",
+    title = "Summary statistics of the 3 selected lambdas",
     subtitle = paste0("Model: ",model_name)
       ) %>%
   fmt_number(
