@@ -92,27 +92,6 @@ save(Meteo_Monthly,file = "data/tauchenbach/Meteo_Variables_Monthly_Tauchenbach.
 ##############################################################################################
 ##############################################################################################
 
-#Trying to get daily ET
-
-#now the calculation of ET by Hargreaves-Samani 
-constants <- list()
-constants$elev <- 246.96
-constants$lambda <- 2.45
-constants$lat_rad <- 47.34697
-constants$Gsc <- 0.0820
- 
-data <- data.frame(raw_data$Tmax, raw_data$Tmin)
-constants()
-
-data_test <- data(climatedata)
-constants <- data(constants)
-
-ET_daily <- ET.HargreavesSamani(data_test, 
-   constants, 
-   ts="monthly",
-   message="yes",
-   AdditionalStats="yes"
-   )
 
 
 

@@ -1,14 +1,29 @@
 library(lfstat)
 library(ggplot2)
 library(tidyverse)
-
+library(data.table)
 ########### load data ##############
 getwd()
 rm(list=ls())
-file <- "data/Tauchenbach/Daily_Flow_Tauchenbach.csv"
-raw_data <- read.csv2(file, header=T, skip=0,dec = ".", na.strings = c("Lücke", "NA"), sep = ",") #na.strings = ("L\374cke") if there is Lücke instead of NA 
-raw_data[, 1] <- as.POSIXct(raw_data[,1],"%Y-%m-%d", tz="UTC")
 
+stations <- c("tauchenbach","kienstock","flattach","uttendorf")
+flow_quantiles_list <- list()
+for (station_name in stations) {
+
+  station_name <- "tauchenbach"
+
+file <- paste0("data/",station_name,"/daily_flow_",station_name,".csv")
+raw_data <- read.csv2(file, 
+                      header=F, 
+                      skip=22,dec = ",", 
+                      na.strings = c("Lücke", "NA"), 
+                      sep = ";",
+                      stringsAsFactors = F) #na.strings = ("L\374cke") if there is Lücke instead of NA 
+raw_data[, 1] <-  as.POSIXct(raw_data[, 1], format = "%d.%m.%Y %H:%M", tz = "UTC")
+
+raw_data[, 2] <- trimws(raw_data[, 2])
+
+raw_data[, 2] <- as.numeric(raw_data[, 2])
 
 raw_data <- data.frame(date=raw_data[, 1], 
            day = as.numeric(format(raw_data[, 1], "%d")), 
@@ -29,7 +44,7 @@ data_lfobj <- createlfobj(raw_data,
             )
 plot(raw_data$date,data_lfobj$flow,  type = "l") 
 lines(raw_data$date,data_lfobj$baseflow, col = 2)
-test <- data_lfobj$baseflow
+
 # BASEFLOW INDEX
 # BFI_vector_seasonal <- BFI(data_lfobj, 
 #                            year = "any",
@@ -90,24 +105,24 @@ for (i in 1:length(years)) {
 
 seasonality_df <- data.frame(years,winter_Q95,summer_Q95)
 seasonality_df$SR_yearly <- seasonality_df$summer_Q95/seasonality_df$winter_Q95
-
-ggplot(seasonality_df,) +
-  geom_point(aes(x = years, y = winter_Q95, colour = "red"))+
-  geom_line(aes(x = years, y = winter_Q95, colour = "red"))+
-  
-  geom_point(aes(x = years, y = summer_Q95, colour = "blue"))+
-  geom_line(aes(x = years, y = summer_Q95, colour = "blue"))+
-  
-  geom_point(aes(x = years, y = SR_yearly, colour = "green"))+
-  geom_line(aes(x = years, y = SR_yearly, colour = "green"))+
-  
-  geom_hline(aes(yintercept = 0.8))+#indicating threshhold for summer regine
-  geom_hline(aes(yintercept = 1.25))+#indicating threshhold for summer regine
-  labs(colour = "Legend")+
-  theme(legend.position="right")+
-  scale_shape_discrete(name  ="Payer",
-                       breaks=c("Female", "Male","ratio"),
-                       labels=c("Woman", "Man","summer"))
+# 
+# ggplot(seasonality_df,) +
+#   geom_point(aes(x = years, y = winter_Q95, colour = "red"))+
+#   geom_line(aes(x = years, y = winter_Q95, colour = "red"))+
+#   
+#   geom_point(aes(x = years, y = summer_Q95, colour = "blue"))+
+#   geom_line(aes(x = years, y = summer_Q95, colour = "blue"))+
+#   
+#   geom_point(aes(x = years, y = SR_yearly, colour = "green"))+
+#   geom_line(aes(x = years, y = SR_yearly, colour = "green"))+
+#   
+#   geom_hline(aes(yintercept = 0.8))+#indicating threshhold for summer regine
+#   geom_hline(aes(yintercept = 1.25))+#indicating threshhold for summer regine
+#   labs(colour = "Legend")+
+#   theme(legend.position="right")+
+#   scale_shape_discrete(name  ="Payer",
+#                        breaks=c("Female", "Male","ratio"),
+#                        labels=c("Woman", "Man","summer"))
   
 #using the tidyverse package functions group_by and summarizese work with one categorial and one continuous variable
 #first create a year_month column to group the data
@@ -125,6 +140,39 @@ data_Monthly <- data %>%
                    baseflow_max = max(baseflow)
                    ) %>% 
   as.data.frame()
++
+
+save(data_Monthly,file = paste0("data/",station_name,"/Hydro_Variables_",station_name,"_Monthly.RData"))
 
 
-save(data_Monthly,file = "data/tauchenbach/Hydro_Variables_Tauchenbach_Monthly.RData")
+#calculating weekly flow variables -----
+df <- data
+df <- subset(df, year >= 1961)
+
+df$week_year <- isoweek(df$date)
+df$week_tot <- c(1,rep(2:(2 + ceiling(nrow(df) / 7) - 1), each = 7)[1:(nrow(df)-1)])
+
+Hydro_Weekly <- df %>% setDT() %>% 
+  .[,.(date = last(date),
+       flow_min = min(flow),
+       year = last(year),
+       month = last(month),
+       week_year = last(week_year)), by = week_tot]
+
+save(Hydro_Weekly,file = paste0("data/",station_name,"/Hydro_Variables_",station_name,"_Weekly.RData"))
+
+##### calculate Q95 and Q94 and Q96
+q96 <- quantile(raw_data$flow, probs = 0.04, na.rm = T)
+q95 <- quantile(raw_data$flow, probs = 0.05, na.rm = T)
+q94 <- quantile(raw_data$flow, probs = 0.06, na.rm = T)
+q95_winter <- mean(seasonality_df$winter_Q95)
+q95_summer <- mean(seasonality_df$winter_Q95) 
+SR_mean <- mean(seasonality_df$SR_yearly)
+SR_SD <- sd(seasonality_df$SR_yearly)
+MQ <- quantile(raw_data$flow, probs = 0.5, na.rm = T)
+flow_quantiles <- data.frame(station_name,q96,q95,q94,q95_winter,q95_summer,MQ,SR_mean, SR_SD)
+colnames(flow_quantiles) <- c("station","Q96","Q95","Q94","Q95_winter","Q95_summer","MQ","SR_mean","SR_SD")
+flow_quantiles_list[[paste0(station_name)]] <- flow_quantiles
+}
+save(flow_quantiles_list,file = "data/flow_quantiles_list.RData")
+

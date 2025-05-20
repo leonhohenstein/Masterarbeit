@@ -1,0 +1,7 @@
+install.packages("rsoi")
+require(rsoi)
+enso = rsoi::download_enso()
+nao = rsoi::download_nao()
+ao = rsoi::download_ao()
+mei = rsoi::download_mei()
+soi = rsoi::download_soi()
