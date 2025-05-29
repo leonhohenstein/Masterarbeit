@@ -62,10 +62,11 @@ WB_table_wide <- do.call(cbind, WB_list)
 
 
 ########## Arrange the final Data set by removing surplus date columns and adding other variable columns ###
-
+dates <- WB_table_wide$WB_1week.Date
 df <- WB_table_wide %>% #removing surplus date columns 
   select(-contains("Date"))
-df <- final_df %>% #removing surplus columns that define the aggregation period
+df$Date <- dates
+df <- df %>% #removing surplus columns that define the aggregation period
   select(-contains("Acc_Per"))
 
 data <- rename(data,Date = date)

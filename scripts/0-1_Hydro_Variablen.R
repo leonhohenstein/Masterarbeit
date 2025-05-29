@@ -2,6 +2,7 @@ library(lfstat)
 library(ggplot2)
 library(tidyverse)
 library(data.table)
+library(zoo)
 ########### load data ##############
 getwd()
 rm(list=ls())
@@ -159,6 +160,76 @@ Hydro_Weekly <- df %>% setDT() %>%
        month = last(month),
        week_year = last(week_year)), by = week_tot]
 
+#Calculating Aggregates of hydrographs ----
+
+Hydro_Weekly <- Hydro_Weekly %>%
+  arrange(date) %>%
+  mutate(flow_ma1 = rollmean(flow_min, k = 1, align = "right", fill = NA),
+         diff_ma1 = c(NA, diff(flow_ma1)),
+         flow_ma2 = rollmean(flow_min, k = 2, align = "right", fill = NA),
+         diff_ma2 = c(NA, diff(flow_ma2)),
+         flow_ma4 = rollmean(flow_min, k = 4, align = "right", fill = NA),
+         diff_ma4 = c(NA, diff(flow_ma4)),
+         flow_ma8 = rollmean(flow_min, k = 8, align = "right", fill = NA),
+         diff_ma8 = c(NA, diff(flow_ma8)))
+
+
+#Calculating Slope of hydrographs ----
+
+compute_trailing_spline <- function(x, y, window_size = 30, spar = NULL, degfree = NULL) {
+  
+  n <- length(y)
+  deriv_1 <- rep(NA_real_, n)
+  deriv_2 <- rep(NA_real_, n)
+  flow_spline <- rep(NA_real_, n)
+  
+  for (i in seq_along(y)) {
+    if (i < window_size) next  # Not enough past data
+    
+    idx_window <- (i - window_size + 1):i
+    x_win <- x[idx_window]
+    y_win <- y[idx_window]
+    
+    # Fit smoothing spline with either spar or df
+    fit <- if (!is.null(spar)) {
+      smooth.spline(x_win, y_win, spar = spar)
+    } else if (!is.null(degfree)) {
+      smooth.spline(x_win, y_win, df = degfree)
+    } else {
+      stop("Specify either spar or degfree for smoothing")
+    }
+    
+    # Predict at the last point (current i)
+    deriv_1[i] <- predict(fit, x[i], deriv = 1)$y
+    deriv_2[i] <- predict(fit, x[i], deriv = 2)$y
+    flow_spline[i] <- predict(fit, x[i])$y
+  }
+  
+  results <- data.frame(deriv_1 = deriv_1, deriv_2 = deriv_2, flow_spline = flow_spline)
+  
+  return(results)
+}
+
+results_spline <- compute_trailing_spline(x = as.numeric(Hydro_Weekly$date),
+                                          y = Hydro_Weekly$flow_min, window = 10, spar = 0.99, degfree = NULL) #second version
+
+# Apply to your vector
+# results_spline <- smooth_trailing_spline(df$flow, window = 30) #first version
+
+
+# rm(df_test)
+Hydro_Weekly <- cbind(Hydro_Weekly, results_spline)
+
+# 
+# df_test %>%  
+#   filter(year == 2018) %>% 
+#   ggplot()+
+#   geom_point(aes(x=date, y = flow_min)) +
+#   geom_line(aes(x=date, y = flow_spline), color = "steelblue")+
+#   geom_line(aes(x=date, y = deriv_1), color = "darkred")+
+#   geom_line(aes(x=date, y = deriv_2), color = "forestgreen")
+#   
+  
 save(Hydro_Weekly,file = paste0("data/",station_name,"/Hydro_Variables_",station_name,"_Weekly.RData"))
 
 ##### calculate Q95 and Q94 and Q96
