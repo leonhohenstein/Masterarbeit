@@ -13,16 +13,18 @@ library(stringr)
 rm(list=ls())
 
 ### name the models and dataset of interest ------
-
-model_name <- c("EN_weekly_standard")
+today <- Sys.Date() -1
+# today <-
+model_name <- c("Var_Sel_test_1_SE_sqrt_k")
 dataset <- "lagged_TB" #TB = Tauchenbach
 station <- "tauchenbach"
 
-load(paste0("results/",model_name,"/",model_name,"_",dataset,"_coefs_list.RData"))
-load(paste0("results/",model_name,"/",model_name,"_",dataset,"_forecasts_list.RData"))
-load(paste0("results/",model_name,"/",model_name,"final_model_list.RData"))
-load(paste0("results/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
-load(paste0("results/",model_name,"/",model_name,"_",dataset,"n_coefs_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_coefs_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_forecasts_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_final_model_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"n_coefs_list.RData"))
+load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"results.RData"))
 
 load("data/flow_quantiles_list.RData")
 
@@ -36,9 +38,9 @@ cm_list <- list()
 
 n_horizons <- as.numeric(length(unique(names(forecasts_list))))
 
-if (file.exists(paste0("results/",model_name,"/coefficients/"))){
+if (file.exists(paste0("results/",today,"/",model_name,"/coefficients/"))){
 } else {
-  dir.create(file.path(paste0("results/",model_name,"/coefficients/")))
+  dir.create(file.path(paste0("results/",today,"/",model_name,"/coefficients/")))
 }
 n_coefs <- do.call(rbind,n_coefs_list)
 
@@ -158,38 +160,43 @@ n_coefs <- do.call(rbind,n_coefs_list)
   coefs_df <- purrr::imap_dfr(coefs_list, ~bind_rows(.x) %>%  mutate(horizon = .y)) %>% 
     rename(coefs = s1)
   
-  coefs_df$horizon <- as.factor(coefs_df$horizon)
+  # coefs_df$horizon <- as.factor(coefs_df$horizon)
   
-  levels(coefs_df$horizon) <- seq(1,length(unique(coefs_df$horizon)),1)
+  coefs_df$n_horizon <- stringr::str_remove(coefs_df$horizon, "fc_horizon_") %>%
+    as.numeric() %>%
+    factor(levels = sort(unique(.)))
+  
+  # levels(coefs_df$horizon) <- seq(1,length(unique(coefs_df$horizon)),1)
   
   coefs_df <- coefs_df %>% rename(variable = rowname)
   
-  coefs_df$n_horizon <- stringr::str_remove(coefs_df$horizon, "fc_horizon_") %>% 
-    as.factor()
-  
-  levels(coefs_df$horizon) <- seq(1,length(unique(coefs_df$horizon)),1)
+  # levels(coefs_df$n_horizon) <- seq(1,length(unique(coefs_df$horizon)),1)
   
   coefs_df$variable <- as.factor(coefs_df$variable)
-  # coefs_df_final %>% 
-  #   setDT() %>% 
-  #   .[value != 0] %>% 
-  #   ggplot(aes(x=fc_horizon,y=value,color = coefficient))+
-  #   geom_line()+
-  #   facet_wrap(~coefficient, scales= "free")
   
-  # png(file=paste0("results/",model_name,"/coefficients/",model_name,"_coefs_bars_all_fc-h.png"),
-  #     width = 1000, height = 600, units = "px")
-  # 
-  plot <- coefs_df %>% 
-    setDT() %>% 
-    .[coefs != 0 & variable != "(Intercept)"] %>% 
-    ggplot(aes(x = n_horizon, y = coefs, fill = horizon)) +
+  top_coefs <- coefs_df %>% setDT() %>% 
+    .[variable != "(Intercept)", .(coefs = sum(coefs)), by = variable]
+  
+  top_coefs <- top_coefs %>%  arrange(desc(coefs))
+  
+  top_coefs <- top_coefs$variable[1:20]
+
+
+  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_bars_all_fc-h.png"),
+      width = 1000, height = 600, units = "px")
+  
+  plot <- coefs_df %>%
+    filter(variable %in% top_coefs) %>%
+    mutate(variable = factor(variable, levels = top_coefs)) %>% 
+    ggplot(aes(x = n_horizon, y = coefs, fill = n_horizon)) +
     geom_col(color = "black", width = 0.9) +
     facet_wrap(~variable, scales = "fixed") +
     labs(
       x = "Forecasting Horizon",
       y = "Coefficient of Predictors",
-      fill = "Forecasting Horizon"
+      fill = "Forecasting Horizon",
+      title = paste0("Importance of 20 Most Important Predictor Variables in ",model_name),
+      subtitle = paste0(Sys.time())
     ) +
     theme_minimal(base_size = 14) +  # Set base font size
     geom_hline(yintercept = 0)+
@@ -200,8 +207,9 @@ n_coefs <- do.call(rbind,n_coefs_list)
       legend.position = "bottom"
     )
     # scale_x_discrete(breaks = n_horizon)
-  # print(plot)
-  # dev.off()
+  print(plot)
+  dev.off()
+  
   setDT(coefs_df)
   coefs_df %>% 
     .[, mean_coef := mean(abs(coefs)), by = variable]
@@ -236,10 +244,183 @@ n_coefs <- do.call(rbind,n_coefs_list)
   print(cwb)
   dev.off()
   
+  #### Coefficient Consistency vs. horizons ----
+  
+  
+  coefs_means <- purrr::imap_dfr(
+    results,
+    ~ {
+      tibble(
+        term = names(.x$coef_means),
+        estimate = .x$coef_means,
+        fc_horizon = as.integer(gsub("fc_horizon_", "", .y))
+      )
+    }
+  )
+  
+  coefs_sd  <- purrr::imap_dfr(
+    results,
+    ~ {
+      tibble(
+        term = names(.x$coef_sds),
+        estimate = .x$coef_sds,
+        fc_horizon = as.integer(gsub("fc_horizon_", "", .y))
+      )
+    }
+  )
+
+  coefs_df  <- coefs_df %>%   mutate(fc_horizon = as.numeric(n_horizon))
+  
+  coefs_means  <- coefs_means %>%  rename(mean_coef_CV = estimate, variable = term)
+  
+  coefs_sd  <- coefs_sd %>%  rename(sd_coef = estimate, variable = term)
+  
+  coefs_means <- coefs_means %>%  mutate(fc_horizon = as.numeric(fc_horizon))
+  
+  coefs_sd <- coefs_sd %>%  mutate(fc_horizon = as.numeric(fc_horizon))
+  
+  coefs_df <- left_join(coefs_df, coefs_means, by = c("variable", "fc_horizon"))
+  coefs_df <- left_join(coefs_df, coefs_sd, by = c("variable", "fc_horizon"))
+  
+  coefs_df$coefs_ub <-  coefs_df$mean_coef_CV + coefs_df$sd_coef 
+  coefs_df$coefs_lb <-  coefs_df$mean_coef_CV - coefs_df$sd_coef 
+  
+  #### Error LINES Version 1 ----
+  
+  
+  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_lines_shadings.png"),
+      width = 1000, height = 600, units = "px")
+  
+    coefs_df %>%
+      filter(variable %in% top_coefs[1:16]) %>%
+      mutate(variable = factor(variable, levels = top_coefs)) %>%
+      ggplot(aes(x = as.numeric(n_horizon), y = coefs, group = 1)) +
+      geom_ribbon(aes(ymin = coefs_lb, ymax = coefs_ub), alpha = 0.8, fill = "gray") +
+      geom_line() +
+      geom_point(fill = "steelblue", shape = 21) +
+      facet_wrap(~variable, scales = "fixed")+
+      theme_bw()+
+      labs(x= "Forecasting Horizon [weeks]",
+           y = "Variable Coefficients",
+           title = "Variable Coefficients vs. Forecasting Horizons",
+           subtitle = paste0("Model: ", model_name, "from: ", Sys.Date()))+
+      scale_x_continuous(breaks = seq(1,12,1))
+    dev.off()
+ #### Error BARS Version 2 ----
+    
+  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_error_bars.png"),
+        width = 1000, height = 600, units = "px")
+    
+    coefs_df %>%
+      filter(variable %in% top_coefs[1:16]) %>%
+      mutate(variable = factor(variable, levels = top_coefs)) %>% 
+      ggplot(aes(x = n_horizon, y = coefs, fill = n_horizon)) +
+      
+      geom_col(color = NA, width = 0.9, alpha = 1) +                    
+      # geom_point(aes(y = mean_coef_CV), size = 0.8) +                          
+      geom_errorbar(aes(ymin = coefs_lb, ymax = coefs_ub),                    
+                    width = 0.4, size = 0.5) +                                  # Thicker lines
+      
+      geom_hline(yintercept = 0) +                                            
+      facet_wrap(~variable, scales = "fixed") +                                
+      scale_x_discrete(breaks = seq(1, 12, 1)) +                                #
+      labs(
+        x = "Forecasting Horizon [weeks]",
+        y = "Variable Coefficients",
+        title = paste0("Variable Coefficients vs. Forecasting Horizons"),
+        subtitle = paste0("Model: ", model_name, " from: ", Sys.Date())
+      ) +
+      theme_bw() +                                                            
+      theme(
+        axis.title = element_text(size = 16, face = "bold"),
+        axis.text = element_text(size = 12),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.position = "none")
+    dev.off()
+    
+
+      
+        
+    
+#### LAMBDA vs. RMSE Plots ----
+  
+lambda_df <- imap_dfr(
+    results,
+    ~ mutate(.x$global_optimization_results, fc_horizon = as.integer(gsub("fc_horizon_", "", .y)))  )
+
+  SE.factor <- results[["fc_horizon_1"]][["params"]][["SE.factor"]]
+  
+  lambda_min <- lambda_df %>%
+    group_by(fc_horizon) %>%
+    slice_min(RMSE, n = 1) %>%
+    ungroup() %>%
+    select(fc_horizon, lambda_min = lambda, RMSE = RMSE, RMSESD = RMSESD)
+  lambda_min$threshold <- lambda_min$RMSE + lambda_min$RMSESD * SE.factor #labelled as SD but actaully represents the Standard Error
+  
+  lambda.1se_graf <- as.numeric(c(rep(NA,(max(lambda_min$fc_horizon)))))
+  
+  for(h in 1:nrow(lambda_min)){
+
+      temp <- lambda_df[which(lambda_df$fc_horizon == h),]
+      temp <- temp[temp$RMSE <= lambda_min$threshold[h],]
+      lambda.1se_graf[h] <- temp$lambda[which.max(temp$lambda)]
+
+  }
+  
+  lambda_1se_df <- tibble(
+    fc_horizon = lambda_min$fc_horizon,
+    lambda_1se = lambda.1se_graf  )
+  
+  lambda_lines  <- lambda_min %>%
+    select(fc_horizon, lambda_min) %>%
+    left_join(lambda_1se_df, by = "fc_horizon")
+  
+  # 
+  # lambda.min <- lambda_df$lambda[which.min(lambda_df$RMSE)]
+  # 
+  # threshold <- min(lambda_df$RMSE) + (lambda_df$RMSESD[which.min(lambda_df$RMSE)] * SE.factor) #labelled as SD but actaully represents the Standard Error
+  # 
+  # temp <- lambda_df[lambda_df$RMSE <= threshold,]
+  # 
+  # lambda.1se <- temp$lambda[which.max(temp$lambda)]
+  # 
+  lambda_df$RMSE_lb <- lambda_df$RMSE-lambda_df$RMSESD
+  lambda_df$RMSE_ub <- lambda_df$RMSE+lambda_df$RMSESD
+  
+# lambda_df %>% 
+#   ggplot()+
+#   geom_line(aes(x=log10(lambda),y = RMSE))+
+#   facet_wrap(~fc_horizon)+
+#   geom_line(aes(x=log10(lambda),y = RMSE_lb), color = "red", linetype = "dotted")+
+#   geom_line(aes(x=log10(lambda),y = RMSE_ub), color = "red", linetype = "dotted")+
+#   geom_vline(xintercept = c(log10(lambda.min), log10(lambda.1se)))
+#   
+lambda_df %>%
+  ggplot(aes(x = log10(lambda), y = RMSE)) +
+  geom_line() +
+  facet_wrap(~fc_horizon) +
+  geom_line(aes(y = RMSE_lb), color = "darkred", linetype = "dotted") +
+  geom_line(aes(y = RMSE_ub), color = "darkred", linetype = "dotted") +
+  geom_vline(
+    data = lambda_lines,
+    aes(xintercept = log10(lambda_min)),
+    linetype = "dashed", color = "steelblue"
+  ) +
+  geom_vline(
+    data = lambda_lines,
+    aes(xintercept = log10(lambda_1se)),
+    linetype = "dashed", color = "forestgreen"
+  ) +
+  labs(title = paste0("RMSE across log10(lambda) per forecast horizon in ", model_name, Sys.Date()),
+       subtitle = "Blue = lambda.min, Green = lambda.1se",
+       x = "log10(lambda)", y = "RMSE") +
+  theme_minimal()
+  
+
 #### QUANTILE BASED EVALUATION ----
-  if (file.exists(paste0("results/",model_name,"/quantile_evaluation/"))){
+  if (file.exists(paste0("results/",today,"/",model_name,"/quantile_evaluation/"))){
   } else {
-    dir.create(file.path(paste0("results/",model_name,"/quantile_evaluation/")))
+    dir.create(file.path(paste0("results/",today,"/",model_name,"/quantile_evaluation/")))
   }
   
   quant_eval_95 <- do.call(rbind,forecasts_list) %>% 
@@ -272,7 +453,7 @@ cm_long <- pivot_longer(cm_df_all,cols = c("accuracy","kappa","sensitivity","spe
              values_to = "value")
 cm_long$characteristic <- as.factor(cm_long$characteristic)
 
-png(file=paste0("results/",model_name,"/quantile_evaluation/",model_name,"_confusion_bars.png"),
+png(file=paste0("results/",today,"/",model_name,"/quantile_evaluation/",model_name,"_confusion_bars.png"),
     width = 800, height = 600, units = "px")
 
 plot <- cm_long %>% 
@@ -318,7 +499,7 @@ quantile_lines <- data.frame(
     # ,"Q96"
     ))
 
-png(file=paste0("results/",model_name,"/quantile_evaluation/",model_name,"_residuals_quantile_lines"),
+png(file=paste0("results/",today,"/",model_name,"/quantile_evaluation/",model_name,"_residuals_quantile_lines"),
     width = 800, height = 600, units = "px")
 
 plot <- forecast_df %>% 
@@ -356,7 +537,7 @@ dev.off()
 
 
 
-png(file=paste0("results/",model_name,"/quantile_evaluation/",model_name,"_residuals_quantile_lines_split"),
+png(file=paste0("results/",today,"/",model_name,"/quantile_evaluation/",model_name,"_residuals_quantile_lines_split"),
     width = 800, height = 600, units = "px")
 
 plot <- forecast_df %>% 
@@ -403,12 +584,12 @@ forecast_df %>%
 ##### Hydrographs of predicted vs. observed flows ---------
 
 
-if (file.exists(paste0("results/",model_name,"/hydrographs/"))){
+if (file.exists(paste0("results/",today,"/",model_name,"/hydrographs/"))){
 } else {
-  dir.create(file.path(paste0("results/",model_name,"/hydrographs/")))
+  dir.create(file.path(paste0("results/",today,"/",model_name,"/hydrographs/")))
 }
 
-png(file=paste0("results/",model_name,"/hydrographs/",model_name,"_hydrogaphs_facet.png"),
+png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrogaphs_facet.png"),
     width = 1000, height = 600, units = "px")
 
 
@@ -446,7 +627,7 @@ print(plot)
 dev.off()
 
 
-png(file=paste0("results/",model_name,"/hydrographs/",model_name,"_hydrographs_stacked.png"),
+png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrographs_stacked.png"),
     width = 1000, height = 600, units = "px")
 
 plot <- forecast_df %>% 
@@ -484,9 +665,9 @@ print(plot)
 dev.off()
 
 #### GOF vs. Horizons Plot ----------
-if (file.exists(paste0("results/",model_name,"/GOF/"))){
+if (file.exists(paste0("results/",today,"/",model_name,"/GOF/"))){
 } else {
-  dir.create(file.path(paste0("results/",model_name,"/GOF/")))
+  dir.create(file.path(paste0("results/",today,"/",model_name,"/GOF/")))
 }
 
 load(file = paste0("data/tauchenbach/Final_df_Tauchenbach_weekly.RData"))
@@ -550,7 +731,7 @@ GOF_long <- GOF %>% pivot_longer(cols = c(RMSE_scaled_season, RMSE_scaled_lag, M
                          names_to = "GOF_metric") %>% 
   select(-c("RMSE","MAE"))
 
-png(file=paste0("results/",model_name,"/GOF/",model_name,"_GOF_vs_Horizons.png"),
+png(file=paste0("results/",today,"/",model_name,"/GOF/",model_name,"_GOF_vs_Horizons.png"),
     width = 1000, height = 600, units = "px")
 
 GOF_long %>% 
@@ -620,7 +801,7 @@ gt_table <- gt(summary_table) %>%
   #   locations = cells_title(groups = "title")
   # )
 print(gt_table)
-gtsave(gt_table, paste0("results/",model_name,"/summary_table_forecasts.png"))
+gtsave(gt_table, paste0("results/",today,"/",model_name,"/summary_table_forecasts.png"))
 
 
 # Print the table

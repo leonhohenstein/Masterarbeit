@@ -98,9 +98,8 @@ calculate_lags2 <- function(df, var, lags) {
   
 }
 
-#----------#----------------------------------------------------------------
 
-### create forecasting function ----
+# CREATE FORECASTING FUNCTION ----
 
 get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_names_lagged = NULL, lags = NULL, 
                          diff_lag = FALSE, temp_res = c("week"), stepsize, obj_fnct, transform = NULL,
@@ -253,6 +252,7 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     #after the validation time and ends one step before the test step of the train data set
   }
   
+  k <- length(tc[["index"]])
   #### GLOBAL OPTIMIZATION OF LAMBDA ----
   
   if(seasonality == T)
@@ -297,7 +297,9 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
   
   lambda.min <- m$results$lambda[which.min(m$results$RMSE)]
   
-  threshold <- min(m$results$RMSE) + (m$results$RMSESD[1] * SE.factor) #labelled as SD but actaully represents the Standard Error
+  # threshold_1 <- min(m$results$RMSE) + (m$results$RMSESD[1]* SE.factor) #labelled as SD but actaully represents the Standard Error
+  
+  threshold <- min(m$results$RMSE) + ((m$results$RMSESD[which.min(m$results$RMSE)] /sqrt(k)) * SE.factor) #labelled as SD but actaully represents the Standard Error
   
   temp <- m$results[m$results$RMSE <= threshold,]
   
@@ -509,7 +511,7 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
               coef_sds = coef_sds,
               params = list(lags = lags,rolling_window = rolling_window,stepsize = stepsize,
                             temp_res = temp_res,transformation = transform,objc_fnct = obj_fnct, 
-                            lambda_opt = lambda_opt, SE.factor = SE.factor),
+                            lambda_opt = lambda_opt, SE.factor = SE.factor, num_CV_folds = k),
               global_optimization_results = global_optimization_results))
   
 }
@@ -518,12 +520,13 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
 #### forecasting ----
 results <- list()
 
-fc_horizons <- c(1:6)
+fc_horizons <- c(1:12)
 forecasts_list <- list()
 final_model_list <- list()
 n_coefs_list <- list()
 coefs_list <- list()
 GOF_list <- list()
+
 
 for (h in fc_horizons) {
   
@@ -543,7 +546,7 @@ for (h in fc_horizons) {
       transform = "sqrt",
       seasonality = T,
       lambda_opt = "lambda.1se", #"lambda.1se" oder "lambda.min",
-      SE.factor = 0.5
+      SE.factor = 1
     )
   
   forecasts_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$forecast
@@ -562,7 +565,7 @@ for (h in fc_horizons) {
 
 # name model parameters to make storing the results distinguishable
 
-model_name <- c("Var_Sel_test_05_SE")
+model_name <- c("Var_Sel_test_1_SE_sqrt_k")
 today <- Sys.Date()
 
 # if (file.exists(paste0("results/",today,"/",model_name,"/coefficients/"))){
@@ -593,15 +596,12 @@ save(forecasts_list,file = paste0("results/",today,"/",model_name,"/",model_name
 save(GOF_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
 save(results,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"results.RData"))
 
-
-w
 h <- 1
-x = x
 resp = "flow"
 horizon = h
 var_names = vn
 var_names_lagged = vn_lagged
-lags = 2
+lags = 1
 rolling_window = F #T für meine, F für Johannes version
 diff_lag = FALSE
 temp_res = "week"
@@ -611,6 +611,8 @@ transform = "sqrt"
 seasonality = T
 filter_year <- 2014
 lambda_opt = "lambda.1se" #"lambda.1se" oder "lambda.min"
+SE.factor = 1
+
 
 
 forecast_df <- do.call(rbind,forecasts_list)
