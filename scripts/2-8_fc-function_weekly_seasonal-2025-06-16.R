@@ -76,7 +76,7 @@ vn_lagged <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12", "cwb24","cwb52",
                "Tmin", "Tmax", "snow", "prec", "sun", "rET", "flow_spline", "deriv_1", "deriv_2")
 
 vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month",
-
+                    
                     "year", "week_year","week_tot", "Tmin", "Tmax", "snow", "prec", "sun", "rET",
                     "sin_month",   "cos_month","sin_week", "cos_week",
                     "ao_last",
@@ -94,9 +94,9 @@ vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb
 #                     "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",
 #                     "flow_spline" )
 
-# manual_interactions <- 
+manual_interactions <- 
   
-### calculate lags ----
+  ### calculate lags ----
 calculate_lags2 <- function(df, var, lags) {
   
   map_lag <- lags %>% map(~partial(lag, n = .x))
@@ -330,7 +330,7 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     
     if (seasonality) {
       xtrain_fold <- xtrain_fold 
-                        # %>% select(-"date")
+      # %>% select(-"date")
       predictors <- setdiff(names(xtrain_fold), c("y", "season"))
       interaction_terms <- paste(predictors, "* season", collapse = " + ")
       formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
@@ -378,48 +378,48 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
   coef_means <- rowMeans(coefs)
   coef_sds <- apply(coefs, 1, sd)
   
- #### Retrain the Final Model for lambda.1se -----
+  #### Retrain the Final Model for lambda.1se -----
   
   if(lambda_opt == "lambda.1se")
     
-    {
-    
-     if(seasonality == T)
-    
   {
     
-    # xtrain <- xtrain %>%  select(-"date")
-    
-    predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
-    interaction_terms <- paste(predictors, "* season", collapse = " + ")
-    formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
-    
-    if(interaction == "manual"){
-      formula <- interactions_manual
+    if(seasonality == T)
+      
+    {
+      
+      # xtrain <- xtrain %>%  select(-"date")
+      
+      predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
+      interaction_terms <- paste(predictors, "* season", collapse = " + ")
+      formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
+      
+      if(interaction == "manual"){
+        formula <- interactions_manual
+      }
+      
+      
+      m <- caret::train(
+        # formula = formula,  # Use the generated formula
+        form = formula,
+        data = xtrain,      # Training data
+        method = "glmnet",  # Elastic net
+        family = "gaussian",
+        trControl = tc,
+        tuneGrid = expand.grid(alpha = 1, lambda = lambda),
+        preProc = c("center", "scale"),
+        metric = obj_fnct
+      )
     }
     
-    
-    m <- caret::train(
-      # formula = formula,  # Use the generated formula
-      form = formula,
-      data = xtrain,      # Training data
-      method = "glmnet",  # Elastic net
-      family = "gaussian",
-      trControl = tc,
-      tuneGrid = expand.grid(alpha = 1, lambda = lambda),
-      preProc = c("center", "scale"),
-      metric = obj_fnct
-    )
-  }
-  
-  else
-    
-  {
-    m <- caret::train(x = X, y = y, method = "glmnet", family = "gaussian", 
-                      
-                      trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = lambda), 
-                      
-                      preProc = c("center", "scale"), metric = obj_fnct)
+    else
+      
+    {
+      m <- caret::train(x = X, y = y, method = "glmnet", family = "gaussian", 
+                        
+                        trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = lambda), 
+                        
+                        preProc = c("center", "scale"), metric = obj_fnct)
     }
   }
   
@@ -519,8 +519,8 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     as.data.frame() 
   
   # lambdas <- data.frame(lambda.1se = lambda.1se, lambda.min = lambda.min, lambda_best_tune = lambda_opt, lambda_used = lambda)
- 
-   return(list(forecast = out,
+  
+  return(list(forecast = out,
               model = final_model,
               n_coefs = n_coefs,
               coefs = coefs,
@@ -556,13 +556,13 @@ for (h in fc_horizons) {
       var_names = vn,
       var_names_lagged = vn_lagged,
       lags = 1,
-      rolling_window = F, #T für meine, F für Johannes version
-      diff_lag = F,
+      rolling_window = T, #T für meine, F für Johannes version
+      diff_lag = T,
       temp_res = "week",
       stepsize = 50,
       obj_fnct = "RMSE",
       transform = "sqrt",
-      seasonality = T,
+      seasonality = F,
       lambda_opt = "lambda.1se", #"lambda.1se" oder "lambda.min",
       SE.factor = 1,
       interaction = "automatic"
@@ -584,7 +584,7 @@ for (h in fc_horizons) {
 
 # name model parameters to make storing the results distinguishable
 
-model_name <- c("Var_Sel_1se_lag1_benchmark_undiffed")
+model_name <- c("CM-sqrt_diffed_no_inter")
 today <- Sys.Date()
 
 # if (file.exists(paste0("results/",today,"/",model_name,"/coefficients/"))){

@@ -7,19 +7,92 @@ library(Evapotranspiration)
 
 rm(list=ls())
 
-file <- "data/tauchenbach/Predictors_Tauchenbach.csv"
-raw_data <- read.csv2(file,sep = ",", header=T, skip=0, na.strings = ("NA")) #na.strings = ("L\374cke") if there is Lücke instead of NA 
-# raw_data[, 1] <- gsub("T|\\+00:00", " ", raw_data[,1])
-raw_data$date <- as.POSIXct(raw_data$date,"%Y-%m-%d", tz="UTC")
-colnames(raw_data) <- c("precipitation","Date", "Tmin", "Tmax","sunshine","snowcover")
-attach(raw_data)
-raw_data$precipitation <- as.numeric(precipitation)
-raw_data$sunshine <- as.numeric(sunshine)
-raw_data$Tmin <- as.numeric(Tmin)
-raw_data$Tmax <- as.numeric(Tmax)
-raw_data$snowcover <- as.numeric(snowcover)
+# file <- "data/tauchenbach/Predictors_Tauchenbach.csv"
+load( file = "data/climate/spartacus_clipped_SN_TN.RData")
+load( file = "data/climate/spartacus_clipped_TX_RR.RData")
+load( file = "data/climate/spartacus_SR.RData")
 
-data <- raw_data
+stations_metadata <- data.frame(station_name = c("Tauchenbach","Kienstock","Flattach","Uttendorf"),
+                                catchment_size = c(175,95970,705,128),
+                                elevation = c(247,194,687,789),
+                                hzb_nr = c(210252,207357,213124,203554),
+                                lat = c(47.34697, 48.38217,46.933330,47.26654),
+                                lon = c(16.27815,15.46268,13.13712,12.56822))
+
+
+df <- imap_dfr(results_final, ~ {  
+  
+    param <- .y
+    
+    imap_dfr(.x, ~ {
+      
+      station <- .y
+      
+      df <- .x
+      
+      df %>% rename(value = 2) %>% 
+        mutate(param = param, station = station)
+      
+    })
+  })
+
+df <- imap_dfr(results_final_SA_TN, ~ {  
+  
+        param <- .y
+        
+        imap_dfr(.x, ~ {
+          
+          station <- .y
+          
+          df <- .x
+          
+          df %>% rename(value = 2) %>% 
+            mutate(param = param, station = station)
+          
+        })
+      }) %>% 
+             rbind(df,.)
+
+spartacus_SR <- spartacus_SR %>% pivot_longer(cols = (c("Flattach","Kienstock","Kienstock_Catchment","Uttendorf","Tauchenbach")),
+                                      values_to = "value",
+                                      names_to = "station")
+
+spartacus_SR <- spartacus_SR %>% rename(date = time) %>% 
+  mutate(param = "SR")
+
+df <- spartacus_SR %>% select("date","value","param","station") %>% 
+  rbind(df,.)
+
+
+for (s in unique(stations_metadata$station_name)) {
+  # s <- "Tauchenbach"
+df_temp <- df %>% filter(station == s)
+df_temp <- df_temp %>% pivot_wider(names_from = "param",values_from = "value")  
+
+# raw_data <- read.csv2(file,sep = ",", header=T, skip=0, na.strings = ("NA")) #na.strings = ("L\374cke") if there is Lücke instead of NA 
+# raw_data[, 1] <- gsub("T|\\+00:00", " ", raw_data[,1])
+
+
+df_temp$date <- as.POSIXct(df_temp$date,"%Y-%m-%d", tz="UTC")
+colnames(df_temp) <- c("Date","station","precipitation",  "Tmax","Tmin","snowcover","sunshine")
+
+data <- df_temp
+# 
+# data$date <- as.Date(data$Date)
+# ggplot() +
+#   geom_line(data = df %>% filter(param == "RR" & lubridate::year(date) == 2015), aes(x=date, y= value))+
+#   geom_line(data = data %>% filter(lubridate::year(date) == 2015), aes(x=date, y= precipitation),color = "steelblue")
+
+# test_data <- data %>% select(date,precipitation)
+# test_df <- df %>% filter(param == "RR" & station =="Tauchenbach") %>%  select(date,value)
+# test <- left_join(test_data,test_df,by = "date")
+# test <- test %>% filter(lubridate::year(date) < 2024)
+# sum(test$precipitation)
+# sum(test$value, na.rm = T)
+# sum(is.na(test$value))
+# sum(is.na(test$precipitation))
+# 
+# test[which(is.na(test$value) == T ),]
 
 # ####### Calculate Monthly Means #########
 # start_date <- pmax(precipitation[1,1],data[1,1]) #select the start of both time series (only take the greater value as a start date)
@@ -60,8 +133,8 @@ data_Monthly <- data %>%
 
 ### Calculate Potential EvapoTranspiration by Hargreaves method ############+
 # latitide <- raw_data$lat[1] %>% 
-latitide <- 47.34697 %>% 
-  as.numeric()
+latitide <- stations_metadata %>% filter(station_name == s) %>% 
+  select("lat") %>% as.numeric()
 
 data_Monthly$ETP <- hargreaves(data_Monthly$Tmin_mean, 
                                      data_Monthly$Tmax_mean, 

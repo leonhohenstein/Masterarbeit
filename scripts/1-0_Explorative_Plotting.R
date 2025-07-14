@@ -8,6 +8,7 @@ library(viridis)
 library(hrbrthemes)
 library(rlang)
 library(TTR)#used to easily calculate running SD and runnign Variances
+library(zoo)  # for rollmean
 
 rm(list=ls())
 
@@ -17,6 +18,37 @@ catchment <- "tauchenbach"
 
 
 load(file = paste0("data/tauchenbach/models/",dataset,"_data.RData"))
+load(file = paste0("data/tauchenbach/Final_df_Tauchenbach_weekly.RData"))
+
+
+df <- df %>%
+  arrange(Date) %>%
+  mutate(flow_ma100 = zoo::rollmean(flow_min, k = 100, fill = NA, align = "center"))
+
+# Plot
+ggplot(df, aes(x = Date)) +
+  geom_line(aes(y = flow_min), color = "steelblue", size = 0.7, alpha = 0.6) +  # Raw flow
+  geom_line(aes(y = flow_ma100), color = "darkred", size = 1) +            # Moving average
+  geom_smooth(aes(y = flow_min), method = "lm", color = "darkgreen", se = FALSE, linewidth = 1) +  # Trend line
+  labs(
+    title = "Weekly Flow Time Series with Moving Average and Trend of Tauchenbach",
+    x = "Date",
+    y = "Minimum Flow [m³/s]",
+    # caption = "Blue = raw flow, Red = 100-week MA, Green = linear trend"
+  ) +
+  theme_minimal(base_size = 14)+
+  lims(y=c(0,3))+
+  theme_bw()
+
+df %>% select(c("flow_min","Date")) %>% na.omit() %>% 
+  ggplot(aes(x=Date,y=flow_min))+
+  geom_line()
+
+df %>% 
+  ggplot()+
+  geom_line(aes(x=Date,y=flow_min))
+
+
 attach(df)
 
 ### Explorative Statistics ###
@@ -43,13 +75,13 @@ vars <-  c(                     #just to call all the available variables
            "precipitation_sum_monthly",
            "sunshine_mean_monthly",
            "ETP_sum_monthly",
-           "Flow_min_monthly",
-           "baseflow_min_monthly",
+           "flow_min",
+           "baseflow_min",
            "baseflow_max_monthly",
            "baseflow_mean_monthly")
 
 # Checking for Seasonality -----------------------
-ggplot(df, aes(x=month, y=paste0("Flow_min_monthly"))) + 
+ggplot(df, aes(x=month, y=paste0("flow_min"))) + 
   geom_boxplot()
 
 plot_fun <- function(x) {
@@ -68,7 +100,7 @@ variables <- c("WB_1month.WB_abs","WB_1month.WB_rel")
 
 lapply(variables, plot_fun)
 
-ggplot(df, aes(x=Date, y=Flow_min_monthly)) + 
+ggplot(df, aes(x=Date, y=flow_min)) + 
   geom_line()+
   geom_line(aes(x=Date,y=df$WB_1month.WB_abs))
 
@@ -98,7 +130,7 @@ expl_BP_by_month_vars <- c(                 #just to call all the available vari
   "precipitation_sum_monthly",
   "sunshine_mean_monthly",
   "ETP_sum_monthly",
-  "Flow_min_monthly",
+  "flow_min",
   "BF_min_monthly",
   "BF_max_monthly",
   "BF_mean_monthly")
@@ -150,7 +182,7 @@ plot <-  df %>%
 # Ridgelines ---------------------------------------------------------------
 ### Plotting Ridgelines for seasonality in Low-Flow Distributions ###
 
-ggplot(df, aes(x = Flow_min_monthly, y = month, fill = ..x..)) +
+ggplot(df, aes(x = flow_min, y = month, fill = ..x..)) +
   geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
   scale_fill_viridis(name = "Monthly_Min_Flow", option = "m^3/s") +
   labs(title = 'Blablacar') +
@@ -162,14 +194,14 @@ ggplot(df, aes(x = Flow_min_monthly, y = month, fill = ..x..)) +
     strip.text.x = element_text(size = 8)
   )
 # Plotting Multiple densities ---------------
-  ggplot(data=df, aes(x=Flow_min_monthly, group=month, fill=month)) +
+  ggplot(data=df, aes(x=flow_min, group=month, fill=month)) +
     geom_density(adjust=1.5, alpha=.4) +
     theme_ipsum()
 
 # Histogram and Distributions ---------------
 
 df %>% 
-  ggplot(aes(x=Flow_min_monthly))+
+  ggplot(aes(x=flow_min))+
   geom_histogram( binwidth=0.1, fill="#69b3a2", color="#e9ecef", alpha=0.9) +
   ggtitle("Bin size = 3") +
   theme_ipsum() +
@@ -192,8 +224,8 @@ base_ma <- function(x, n, align = c("right", "center")) {
   }
   as.numeric(stats::filter(x, rep(1 / n, n), sides = side))
 }
-df$MA_50 <- base_ma(df$Flow_min_monthly,50,align = "center")
-df$MA_100 <- base_ma(df$Flow_min_monthly,100,align = "center")
+df$MA_50 <- base_ma(df$flow_min,50,align = "center")
+df$MA_100 <- base_ma(df$flow_min,100,align = "center")
 rownames_to_column(df,var="nrow")
 
 
@@ -202,10 +234,10 @@ png(file=paste0("explorative_plots/",catchment,"/trend_MA_stationarity_with_flow
 
 df %>% 
   ggplot(aes(x = Date)) +
-  geom_line(aes(y = Flow_min_monthly, color = "Flow Min Monthly"), alpha = 0.5) +
+  geom_line(aes(y = flow_min, color = "Flow Min Monthly"), alpha = 0.5) +
   # geom_line(aes(y = MA_50, color = "MA 50"), linewidth = 1.5, alpha = 0.5) +
   geom_line(aes(y = MA_100, color = "MA 100"), linewidth = 1.2, alpha = 0.5) +
-  stat_smooth(aes(y = Flow_min_monthly, color = "Trend Line"),  
+  stat_smooth(aes(y = flow_min, color = "Trend Line"),  
               method = "lm", 
               formula = y ~ x, 
               geom = "smooth") +
@@ -221,15 +253,15 @@ dev.off()
 
   # geom_ma(ma_fun = SMA, n = 100, colour = "black", linetype = "solid", linewidth = 2, align == "center")
 
-df$SD <- runSD(df$Flow_min_monthly, n = 50)
-df$Var <- runVar(df$Flow_min_monthly, n = 50)
+df$SD <- runSD(df$flow_min, n = 50)
+df$Var <- runVar(df$flow_min, n = 50)
 
 df %>% 
   ggplot(aes(x = Date)) +
-  geom_line(aes(y = Flow_min_monthly, color = "Flow Min Monthly"), alpha = 0.5) +
+  geom_line(aes(y = flow_min, color = "Flow Min Monthly"), alpha = 0.5) +
   # geom_line(aes(y = MA_50, color = "MA 50"), linewidth = 1.5, alpha = 0.5) +
   geom_line(aes(y = MA_100, color = "MA 100"), linewidth = 1.2, alpha = 0.5) +
-  stat_smooth(aes(y = Flow_min_monthly, color = "Trend Line"),  
+  stat_smooth(aes(y = flow_min, color = "Trend Line"),  
               method = "lm", 
               formula = y ~ x, 
               geom = "smooth") +
@@ -243,7 +275,7 @@ df %>%
 
 df %>% 
   ggplot(aes(Date))+
-  geom_line(aes(y = Flow_min_monthly, color = "Flow Min Monthly"), alpha = 0.5) +
+  geom_line(aes(y = flow_min, color = "Flow Min Monthly"), alpha = 0.5) +
   # geom_line(aes(y=Var,color = "Var"),alpha =0.5, linewidth = 1.5)+
   geom_line(aes(y=SD,color = "SD"),alpha =0.5, linewidth = 1.5)+
   ggtitle(label = paste0("Monthly Min Flow moving averages and trend for ", catchment))+

@@ -11,7 +11,7 @@ stations <- c("tauchenbach","kienstock","flattach","uttendorf")
 flow_quantiles_list <- list()
 for (station_name in stations) {
 
-  station_name <- "tauchenbach"
+  # station_name <- "kienstock"
 
 file <- paste0("data/",station_name,"/daily_flow_",station_name,".csv")
 raw_data <- read.csv2(file, 
@@ -128,34 +128,44 @@ seasonality_df$SR_yearly <- seasonality_df$summer_Q95/seasonality_df$winter_Q95
 #using the tidyverse package functions group_by and summarizese work with one categorial and one continuous variable
 #first create a year_month column to group the data
 data$year_month <- paste0(data$year,"-",data$month)
-data$year_month <- as.Date(data$date,"%Y-%m")
+data$year_month <- as.Date(data$date,format = "%Y-%m")
 data$year_month <- paste0(data$year,"-",data$month,"-15") %>% #just alternative way of the same from above
   as.POSIXct(., "%Y-%m-%d", tz = "UTC")
 data$baseflow <- data_lfobj$baseflow
 
 data_Monthly <- data %>% 
   group_by(year_month) %>% 
-  dplyr::summarize(Flow_min = min(flow),                   #first define the desired variable and than the function with input variable
-                   baseflow_min = min(baseflow),
+  dplyr::summarize(flow_mean = min(flow),                   #first define the desired variable and than the function with input variable
+                   baseflow_mean = min(baseflow),
                    baseflow_mean = mean(baseflow),
                    baseflow_max = max(baseflow)
                    ) %>% 
   as.data.frame()
-+
+
 
 save(data_Monthly,file = paste0("data/",station_name,"/Hydro_Variables_",station_name,"_Monthly.RData"))
 
 
 #calculating weekly flow variables -----
-df <- data
-df <- subset(df, year >= 1961)
 
-df$week_year <- isoweek(df$date)
-df$week_tot <- c(1,rep(2:(2 + ceiling(nrow(df) / 7) - 1), each = 7)[1:(nrow(df)-1)])
+dates_all <- data.frame(date = seq(as.Date("1961-01-01"), as.Date("2021-12-31"), by = "day"))
+dates_all$week_year <- lubridate::isoweek(dates_all$date)
+setDT(dates_all) 
+dates_all[, year := lubridate::isoyear(date)]
+
+dates_all[, week_tot := .GRP, by = .(week_year,year)]
+
+# dates_all$week_tot <- c(1,rep(2:(2 + ceiling(nrow(dates_all) / 7) - 1), each = 7)[1:(nrow(dates_all)-1)])
+
+df <- data
+df <- dates_all %>% select(c("date","week_tot","week_year")) %>% left_join(., df, by = "date")
+df <- subset(df, lubridate::isoyear(date) >= 1961)
+
+# df$week_year <- isoweek(df$date)
 
 Hydro_Weekly <- df %>% setDT() %>% 
   .[,.(date = last(date),
-       flow_min = min(flow),
+       flow_mean = mean(flow),
        year = last(year),
        month = last(month),
        week_year = last(week_year)), by = week_tot]
@@ -164,13 +174,13 @@ Hydro_Weekly <- df %>% setDT() %>%
 
 Hydro_Weekly <- Hydro_Weekly %>%
   arrange(date) %>%
-  mutate(flow_ma1 = rollmean(flow_min, k = 1, align = "right", fill = NA),
+  mutate(flow_ma1 = rollmean(flow_mean, k = 1, align = "right", fill = NA),
          diff_ma1 = c(NA, diff(flow_ma1)),
-         flow_ma2 = rollmean(flow_min, k = 2, align = "right", fill = NA),
+         flow_ma2 = rollmean(flow_mean, k = 2, align = "right", fill = NA),
          diff_ma2 = c(NA, diff(flow_ma2)),
-         flow_ma4 = rollmean(flow_min, k = 4, align = "right", fill = NA),
+         flow_ma4 = rollmean(flow_mean, k = 4, align = "right", fill = NA),
          diff_ma4 = c(NA, diff(flow_ma4)),
-         flow_ma8 = rollmean(flow_min, k = 8, align = "right", fill = NA),
+         flow_ma8 = rollmean(flow_mean, k = 8, align = "right", fill = NA),
          diff_ma8 = c(NA, diff(flow_ma8)))
 
 
@@ -210,9 +220,10 @@ compute_trailing_spline <- function(x, y, window_size = 30, spar = NULL, degfree
   return(results)
 }
 
+Hydro_Weekly <- Hydro_Weekly[which(is.na(Hydro_Weekly$flow_mean)==F)[1]:nrow(Hydro_Weekly),]
 results_spline <- compute_trailing_spline(x = as.numeric(Hydro_Weekly$date),
-                                          y = Hydro_Weekly$flow_min, window = 10, spar = 0.99, degfree = NULL) #second version
-
+                                          y = Hydro_Weekly$flow_mean, window = 10, spar = 0.99, degfree = NULL) #second version
+sum(is.na(Hydro_Weekly$flow_mean))
 # Apply to your vector
 # results_spline <- smooth_trailing_spline(df$flow, window = 30) #first version
 
@@ -224,7 +235,7 @@ Hydro_Weekly <- cbind(Hydro_Weekly, results_spline)
 # df_test %>%  
 #   filter(year == 2018) %>% 
 #   ggplot()+
-#   geom_point(aes(x=date, y = flow_min)) +
+#   geom_point(aes(x=date, y = flow_mean)) +
 #   geom_line(aes(x=date, y = flow_spline), color = "steelblue")+
 #   geom_line(aes(x=date, y = deriv_1), color = "darkred")+
 #   geom_line(aes(x=date, y = deriv_2), color = "forestgreen")
@@ -233,16 +244,31 @@ Hydro_Weekly <- cbind(Hydro_Weekly, results_spline)
 save(Hydro_Weekly,file = paste0("data/",station_name,"/Hydro_Variables_",station_name,"_Weekly.RData"))
 
 ##### calculate Q95 and Q94 and Q96
-q96 <- quantile(raw_data$flow, probs = 0.04, na.rm = T)
-q95 <- quantile(raw_data$flow, probs = 0.05, na.rm = T)
-q94 <- quantile(raw_data$flow, probs = 0.06, na.rm = T)
-q95_winter <- mean(seasonality_df$winter_Q95)
-q95_summer <- mean(seasonality_df$winter_Q95) 
-SR_mean <- mean(seasonality_df$SR_yearly)
-SR_SD <- sd(seasonality_df$SR_yearly)
-MQ <- quantile(raw_data$flow, probs = 0.5, na.rm = T)
-flow_quantiles <- data.frame(station_name,q96,q95,q94,q95_winter,q95_summer,MQ,SR_mean, SR_SD)
-colnames(flow_quantiles) <- c("station","Q96","Q95","Q94","Q95_winter","Q95_summer","MQ","SR_mean","SR_SD")
+quantiles <- vector(mode = "numeric", length = 100)
+
+for(i in 1:100){
+  quantiles[i] <- quantile(raw_data$flow, probs = i/100, na.rm = T)
+  
+}
+
+paste0("test",1:10)
+
+flow_quantiles <- data.frame(flow = quantiles, quantiles = c(1:100))
+
+# q96 <- quantile(raw_data$flow, probs = 0.04, na.rm = T)
+# q95 <- quantile(raw_data$flow, probs = 0.05, na.rm = T)
+# q94 <- quantile(raw_data$flow, probs = 0.06, na.rm = T)
+# q90 <- quantile(raw_data$flow, probs = 0.1, na.rm = T)
+# q50 <- quantile(raw_data$flow, probs = 0.5, na.rm = T)
+
+# q95_winter <- mean(seasonality_df$winter_Q95)
+# q95_summer <- mean(seasonality_df$summer_Q95) 
+# SR_mean <- mean(seasonality_df$SR_yearly)
+# SR_SD <- sd(seasonality_df$SR_yearly)
+# MQ <- quantile(raw_data$flow, probs = 0.5, na.rm = T)
+# flow_quantiles <- data.frame(station_name,q96,q95,q94,q95_winter,q95_summer,q90,q50,MQ,SR_mean, SR_SD)
+# colnames(flow_quantiles) <- c("station","Q96","Q95","Q94","Q95_winter","Q95_summer","Q90","Q50","MQ","SR_mean","SR_SD")
+
 flow_quantiles_list[[paste0(station_name)]] <- flow_quantiles
 }
 save(flow_quantiles_list,file = "data/flow_quantiles_list.RData")

@@ -1,4 +1,5 @@
-#### Test models on forecasting on Leons data
+#### Upper Benchmark model 
+library(data.table)
 
 library(tidyverse)
 
@@ -9,15 +10,45 @@ library(Metrics)
 library(caret)
 
 rm(list = ls())
+
+stations_list <- c(
+  "tauchenbach",
+  "kienstock",
+  "flattach",
+  "uttendorf")
+
 dataset <- "lagged_TB" #TB = Tauchenbach
-# load(file = paste0("data/tauchenbach/models/",dataset,"_weekly_data.RData"))
-load(file = paste0("data/tauchenbach/Final_df_Tauchenbach_weekly.RData"))
 
-
-#### Test models on forecasting on Leons data
+#create empty lists to store the results of all catchments
+results <- list()
+forecasts_list <- list()
+final_model_list <- list()
+n_coefs_list <- list()
+coefs_list <- list()
+GOF_list <- list()
 
 # laoding data ----
 
+for(station in stations_list){
+  
+  
+  if(station == "kienstock"){
+    load(file =  paste0("data/",station,"/Final_df_","catchment_kienstock","_weekly.RData"))
+    
+     df_cat <- df  %>% select(c("Date",          "WB_1week",      "WB_2week",      "WB_3week",      "WB_6week",      "WB_12week",     "WB_24week",    
+                             "WB_52week",     "precipitation", "Tmin",          "Tmax",          "sunshine" ,     "snowcover",    
+                             "rET"))
+  
+  colnames(df_cat) <- c("date", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52",  "prec",
+                        
+                        "Tmin", "Tmax", "sun", "snow","rET")
+  
+  df_cat <- df_cat %>%  rename_with(~ paste0(.x, "_cat"), .cols = -date)
+  }
+ 
+  
+  load(file =  paste0("data/",station,"/Final_df_",station,"_weekly.RData"))
+  
 x <- as_tibble(df)
 
 x <- x %>% mutate(year = as.integer(year), month = as.integer(month), 
@@ -28,7 +59,7 @@ x <- x %>% mutate(year = as.integer(year), month = as.integer(month),
                   
                   sin_week = sin(week_year), cos_week = cos(week_year))
 
-x <- x %>% dplyr::select(all_of(c("Date","flow_min", "WB_1week", "WB_2week", "WB_3week", 
+x <- x %>% dplyr::select(all_of(c("Date","flow_mean", "WB_1week", "WB_2week", "WB_3week", 
                                   
                                   "WB_6week", "WB_12week","WB_24week","WB_52week", "month", "year", "week_year",
                                   
@@ -54,6 +85,11 @@ colnames(x) <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24"
                  "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2", 
                  "flow_spline" )
 
+if(station == "kienstock"){
+  x <- left_join(x, df_cat, by = "date")
+}
+
+
 # x <- x %>% mutate(flow2 = sqrt(flow))
 
 #in order to actaully use the transformed var (flow2) make it the response variable
@@ -71,12 +107,16 @@ vn <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month"
         "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2", 
         "flow_spline" )
 
+if(station == "kienstock"){
+  vn <- c(vn, setdiff(names(df_cat),"date"))
+}
+
 vn_lagged <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12", "cwb24","cwb52",
                
                "Tmin", "Tmax", "snow", "prec", "sun", "rET", "flow_spline", "deriv_1", "deriv_2")
 
 vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month",
-
+                    
                     "year", "week_year","week_tot", "Tmin", "Tmax", "snow", "prec", "sun", "rET",
                     "sin_month",   "cos_month","sin_week", "cos_week",
                     "ao_last",
@@ -86,16 +126,13 @@ vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb
                     "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",
                     "flow_spline" )
 
-# vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month",
-# 
-#                      "Tmin", "Tmax", "snow", "prec", "sun", "rET",
-#                     "flow_min",
-#                     "flow_ma2",      "diff_ma2" , "flow_ma4",
-#                     "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",
-#                     "flow_spline" )
+if(station == "kienstock"){
+  vn_interaction <- c(vn_interaction, c("cwb1_cat",  "cwb2_cat",  "cwb3_cat",  "cwb6_cat",  "cwb12_cat", "cwb24_cat", "cwb52_cat", "prec_cat",
+                                        "Tmin_cat",  "Tmax_cat",  "sun_cat",   "snow_cat" , "rET_cat"  ))
+}
 
-# manual_interactions <- 
-  
+
+
 ### calculate lags ----
 calculate_lags2 <- function(df, var, lags) {
   
@@ -119,8 +156,13 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
 {
   
   #### forecasting ----
+  x <- x %>% mutate(y = !!as.name(resp))
   
-  x <- x %>% mutate(y = !!as.name(resp)) 
+  # Select all variables that contain "flow" OR "diff" in their name
+  flow_vars <- names(x)[grepl("flow|diff|deriv", names(x))]
+  
+  # Apply the lag to all of them at once
+  x[flow_vars] <- lapply(x[flow_vars], dplyr::lag, n = horizon)
   
   #### Add Seasonality ----
   
@@ -164,7 +206,7 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     
   {
     
-    x <- x %>% mutate(y = y - lead(y, horizon))
+    x <- x %>% mutate(y = y - lead(y, 1))
     #as.name turns the string defined in resp into a symbol
     #!! makes the function evaluate the symbol (insert values stored in it) now 
     #and insert the result into the expression
@@ -173,8 +215,9 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
   else
     
   {
+    x <- x %>% mutate(y = y) 
     
-    x <- x %>% mutate(y = lead(y, horizon)) 
+    # x <- x %>% mutate(y = lead(y, horizon)) #in other version, the target variable is in the future
     
   }
   
@@ -194,6 +237,8 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     var_names <- c(var_names, var_add)
     
   }
+  
+ 
   
   #### Separate Train and Test Data ----
   
@@ -330,7 +375,7 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     
     if (seasonality) {
       xtrain_fold <- xtrain_fold 
-                        # %>% select(-"date")
+      # %>% select(-"date")
       predictors <- setdiff(names(xtrain_fold), c("y", "season"))
       interaction_terms <- paste(predictors, "* season", collapse = " + ")
       formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
@@ -378,48 +423,48 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
   coef_means <- rowMeans(coefs)
   coef_sds <- apply(coefs, 1, sd)
   
- #### Retrain the Final Model for lambda.1se -----
+  #### Retrain the Final Model for lambda.1se -----
   
   if(lambda_opt == "lambda.1se")
     
-    {
-    
-     if(seasonality == T)
-    
   {
     
-    # xtrain <- xtrain %>%  select(-"date")
-    
-    predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
-    interaction_terms <- paste(predictors, "* season", collapse = " + ")
-    formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
-    
-    if(interaction == "manual"){
-      formula <- interactions_manual
+    if(seasonality == T)
+      
+    {
+      
+      # xtrain <- xtrain %>%  select(-"date")
+      
+      predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
+      interaction_terms <- paste(predictors, "* season", collapse = " + ")
+      formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
+      
+      if(interaction == "manual"){
+        formula <- interactions_manual
+      }
+      
+      
+      m <- caret::train(
+        # formula = formula,  # Use the generated formula
+        form = formula,
+        data = xtrain,      # Training data
+        method = "glmnet",  # Elastic net
+        family = "gaussian",
+        trControl = tc,
+        tuneGrid = expand.grid(alpha = 1, lambda = lambda),
+        preProc = c("center", "scale"),
+        metric = obj_fnct
+      )
     }
     
-    
-    m <- caret::train(
-      # formula = formula,  # Use the generated formula
-      form = formula,
-      data = xtrain,      # Training data
-      method = "glmnet",  # Elastic net
-      family = "gaussian",
-      trControl = tc,
-      tuneGrid = expand.grid(alpha = 1, lambda = lambda),
-      preProc = c("center", "scale"),
-      metric = obj_fnct
-    )
-  }
-  
-  else
-    
-  {
-    m <- caret::train(x = X, y = y, method = "glmnet", family = "gaussian", 
-                      
-                      trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = lambda), 
-                      
-                      preProc = c("center", "scale"), metric = obj_fnct)
+    else
+      
+    {
+      m <- caret::train(x = X, y = y, method = "glmnet", family = "gaussian", 
+                        
+                        trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = lambda), 
+                        
+                        preProc = c("center", "scale"), metric = obj_fnct)
     }
   }
   
@@ -477,13 +522,13 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
   # This is necessary, so the forecast has the correct timestamp
   
   
-  out <- switch(res, 
-                
-                month = out %>% mutate(date = date + months(horizon)), 
-                
-                week = out %>% mutate(date = date + weeks(horizon)), 
-                
-                day = out %>% mutate(date = date + days(horizon)))
+  # out <- switch(res, 
+  #               
+  #               month = out %>% mutate(date = date + months(horizon)), 
+  #               
+  #               week = out %>% mutate(date = date + weeks(horizon)), 
+  #               
+  #               day = out %>% mutate(date = date + days(horizon)))
   
   out <- xtest %>%  select(c("date",!!as.name(resp))) %>% 
     
@@ -519,8 +564,8 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
     as.data.frame() 
   
   # lambdas <- data.frame(lambda.1se = lambda.1se, lambda.min = lambda.min, lambda_best_tune = lambda_opt, lambda_used = lambda)
- 
-   return(list(forecast = out,
+  
+  return(list(forecast = out,
               model = final_model,
               n_coefs = n_coefs,
               coefs = coefs,
@@ -536,15 +581,8 @@ get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_na
 
 
 #### forecasting ----
-results <- list()
 
 fc_horizons <- c(1:12)
-forecasts_list <- list()
-final_model_list <- list()
-n_coefs_list <- list()
-coefs_list <- list()
-GOF_list <- list()
-
 
 for (h in fc_horizons) {
   
@@ -554,8 +592,8 @@ for (h in fc_horizons) {
       resp = "flow",
       horizon = h,
       var_names = vn,
-      var_names_lagged = vn_lagged,
-      lags = 1,
+      var_names_lagged = NULL, # sonst vn_lagged,
+      lags = 2,
       rolling_window = F, #T für meine, F für Johannes version
       diff_lag = F,
       temp_res = "week",
@@ -563,28 +601,29 @@ for (h in fc_horizons) {
       obj_fnct = "RMSE",
       transform = "sqrt",
       seasonality = T,
-      lambda_opt = "lambda.1se", #"lambda.1se" oder "lambda.min",
+      lambda_opt = "lambda.min", #"lambda.1se" oder "lambda.min",
       SE.factor = 1,
       interaction = "automatic"
     )
   
-  forecasts_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$forecast
+  forecasts_list[[paste0(station)]][[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$forecast
   
-  final_model_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$model
+  final_model_list[[paste0(station)]][[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$model
   
-  n_coefs_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$n_coefs
+  n_coefs_list[[paste0(station)]][[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$n_coefs
   
-  coefs_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$coefs
+  coefs_list[[paste0(station)]][[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$coefs
   
-  GOF_list[[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$GOF
+  GOF_list[[paste0(station)]][[paste0("fc_horizon_",h)]] <- results[[paste0("fc_horizon_",h)]]$GOF
   
-  print(paste0("finished ",h," / ",max(fc_horizons)))
+  print(paste0("finished ",h," / ",max(fc_horizons)," station ",station))
+  
   
 }
 
 # name model parameters to make storing the results distinguishable
 
-model_name <- c("Var_Sel_1se_lag1_benchmark_undiffed")
+model_name <- c("Climate_Upper_Benchmark_lambdamin")
 today <- Sys.Date()
 
 # if (file.exists(paste0("results/",today,"/",model_name,"/coefficients/"))){
@@ -602,18 +641,14 @@ if (file.exists(paste0("results/",today,"/",model_name,"/"))){
   dir.create(file.path(paste0("results/",today,"/",model_name,"/")))
 }
 
-# load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_coefs_list.RData"))
-# load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_forecasts_list.RData"))
-# load(paste0("results/",today,"/",model_name,"/",model_name,"final_model_list.RData"))
-# load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
-# load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"n_coefs_list.RData"))
-
 save(final_model_list, file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_final_model_list.RData"))
 save(n_coefs_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"n_coefs_list.RData"))
 save(coefs_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_coefs_list.RData"))
 save(forecasts_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_forecasts_list.RData"))
 save(GOF_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
 save(results,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"results.RData"))
+}
+
 
 h <- 1
 resp = "flow"
@@ -631,6 +666,8 @@ seasonality = T
 filter_year <- 2014
 lambda_opt = "lambda.1se" #"lambda.1se" oder "lambda.min"
 SE.factor = 1
+interaction = "automatic"
+
 
 
 
