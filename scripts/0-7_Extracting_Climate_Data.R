@@ -26,9 +26,9 @@ austria <- ne_countries(scale = "medium", country = "Austria", returnclass = "sf
 # catchment_shp_test <- st_union(catchment_shp)
 # catchment_shp_test_kleiner <- st_union(catchment_shp_test_kleiner)
 
-# st_write(catchment_shp_test_kleiner, "C:/Users/Leon/Desktop/Masterarbeit/GIS/merged_polygons_kienstock_catchment.shp")
+# st_write(catchment_shp_test_kleiner, "C:/Users/Leon/Desktop/Masterarbeit/GIS/merged_polygons_Kienstock_catchment.shp")
 
-catchment_kienstock_shp  <- st_read("C:/Users/Leon/Desktop/Masterarbeit/GIS/merged_polygons_kienstock_catchment.shp")
+catchment_Kienstock_shp  <- st_read("C:/Users/Leon/Desktop/Masterarbeit/GIS/merged_polygons_kienstock_catchment.shp")
 
 stations_metadata <- data.frame(station_name = c("Tauchenbach","Kienstock","Flattach","Uttendorf"),
                                 catchment_size = c(175,95970,705,128),
@@ -44,7 +44,7 @@ ggplot(data = austria) +
   theme_bw()
 
 
-spartacus <- "D:/Masterarbeit/data/spartacus/RR"
+spartacus <- "D:/Masterarbeit/data/spartacus/"
 
 
 
@@ -55,7 +55,7 @@ coords_stations <- st_as_sf(stations_metadata, coords = c("lon", "lat"), crs = 4
 
 ggplot() +
   geom_sf(data = austria, fill = "lightgrey", color = "black",linewidth = 1.5, alpha = 0.6) +  
-  geom_sf(data = catchment_kienstock_shp, color = "steelblue",fill = "steelblue")+
+  geom_sf(data = catchment_Kienstock_shp, color = "steelblue",fill = "steelblue")+
     geom_sf(data = coords_stations, color = "black", fill = "red", size = 2, shape = 21, stroke = 1, alpha = 0.7) +  # Points with black outline
 
   # geom_text(data = points_df, aes(x = lon, y = lat, label = label), vjust = -1, fontface = "bold") +  # Bold labels
@@ -70,188 +70,212 @@ ggplot() +
 
 path <- "D:/Masterarbeit/data/spartacus/"
 # parameter <- "RR"
-year <- 1961:2024
+year <- 1961:2021
 results_rbind <- NULL
 results_final <- list()
 results_param <- list()
-
-for(param in c(
-  "RR",
-  # "SR",
-         "SA",
-         "TN",
-               "TX"
-         )) {
-
 results_param <- list()
+count <- 0
+params <- c(
+  # "RR",
+  # "SR",
+         # "SA",
+         # "TN",
+               # "TX"
+"swe_tot",
+  "snow_depth"
+         )
+
+for(param in  params){
 
 #### for stations with point location ----
 # 
-# for(s in unique(coords_stations$station_name))  {
-# 
-#   results_rbind <- NULL
-# 
-#   file <- paste0("SPARTACUS2-DAILY_",param,"_",1990)
-# 
-#   data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
-# 
-# 
-#   lat <- ncvar_get(data_nc, "lat") %>% # Dimensions: (x, y)
-#     as.vector()
-#   lon <- ncvar_get(data_nc, "lon") %>%  # Dimensions: (x, y)
-#     as.vector()
-# 
-#   coords_spartacus <- data.frame(lat =lat, lon = lon)
-# 
-#   coords_spartacus <- st_as_sf(coords_spartacus, coords = c("lon", "lat"), crs = 4326)  # Start with WGS84 (EPSG:4326)
-# 
-# 
-#     for (n in year) {
-# 
-#       file <- paste0("SPARTACUS2-DAILY_",param,"_",n)
-# 
-#       data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
-# 
-# 
-#       #buffer stations with 5 km radius
-#       stations_buffered <- coords_stations %>% filter(station_name == s) %>%
-#         st_transform(., crs = 3857)  # Project to meters
-#       stations_buffered <- st_buffer(stations_buffered, dist = 5000)  # 5 km buffer
-#       stations_buffered <- st_transform(stations_buffered, crs = 4326)  # Back to WGS84
-# 
-#       stations_buffered <- st_join(coords_spartacus, stations_buffered, join = st_intersects, left = FALSE)
-# 
-#       # Get indices of selected points in original coords_spartacus
-#       selected_indices <- which(st_coordinates(coords_spartacus)[,1] %in% st_coordinates(stations_buffered)[,1] &
-#                                   st_coordinates(coords_spartacus)[,2] %in% st_coordinates(stations_buffered)[,2])
-# 
-#       # stations_spartacus <- coords_spartacus[indices,]
-#       # #
-#       # stations_spartacus$ID <- coords_stations$hzb_nr
-#       # #
-#       array <- ncvar_get(data_nc, param)  # Dimensions: (x, y, time)
-# 
-#       results <- list()
-# 
-#       # Loop through each time step
-#       for (t in 1:dim(array)[3]) {  # Loop over the time dimension
-#         # Extract the 2D slice for the current time step
-#         spatial_grid <- array[, , t]
-# 
-#         # Use the indices to extract the values for the grid cells of interest
-#         results[[t]] <- spatial_grid[selected_indices]
-#       }
-# 
-#       results <- do.call(rbind, results)
-# 
-#       results <- results %>% as.data.frame()
-# 
-#       results <- rowMeans(results)
-# 
-#       time <- ncvar_get(data_nc, "time")
-# 
-#       time_units <- ncatt_get(data_nc, "time", "units")$value
-# 
-#       reference_date <- as.Date(sub("days since ", "", time_units))  # Extract the reference date
-# 
-#       results <- data.frame(
-#         date = reference_date + time,
-#         value = results
-#       )
-# 
-#       names(results)[2] <- param
-# 
-#       print(paste0("finished ",n," / ",length(year)))
-# 
-#       results_rbind <- rbind(results_rbind, results)
-#     }
-# 
-#   results_param[[paste0(s)]] <- results_rbind
-# 
-# }
 
+for(s in unique(coords_stations$station_name))  {
 
+  results_rbind <- NULL
 
-#### repeat the same for the whole upstream catchment for kienstock station ----
+  file <- paste0("SPARTACUS2-DAILY_",param,"_",1990)
 
-results_rbind <- NULL
-
-  for (n in year) {
-    # n <- 1961
-    # param <- "RR"
-    file <- paste0("SPARTACUS2-DAILY_",param,"_",n)
-
-    data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
-
-    lat <- ncvar_get(data_nc, "lat") %>% # Dimensions: (x, y)
-      as.vector()
-    lon <- ncvar_get(data_nc, "lon") %>%  # Dimensions: (x, y)
-      as.vector()
-
-    coords_spartacus <- data.frame(lat =lat, lon = lon)
-
-    coords_spartacus <- st_as_sf(coords_spartacus, coords = c("lon", "lat"), crs = 4326)  # Start with WGS84 (EPSG:4326)
-
-
-    points_catchment <- st_join(coords_spartacus, catchment_kienstock_shp, join = st_intersects, left = FALSE)
-
-    # Get indices of selected points in original coords_spartacus
-    selected_indices <- which(st_coordinates(coords_spartacus)[,1] %in% st_coordinates(points_catchment)[,1] &
-                                st_coordinates(coords_spartacus)[,2] %in% st_coordinates(points_catchment)[,2])
-
-    # stations_spartacus <- coords_spartacus[indices,]
-    # #
-    # stations_spartacus$ID <- coords_stations$hzb_nr
-    # #
-    array <- ncvar_get(data_nc, param)  # Dimensions: (x, y, time)
-
-    results <- list()
-
-    # Loop through each time step
-    for (t in 1:dim(array)[3]) {  # Loop over the time dimension
-      # Extract the 2D slice for the current time step
-      spatial_grid <- array[, , t]
-
-      # Use the indices to extract the values for the grid cells of interest
-      results[[t]] <- spatial_grid[selected_indices]
-    }
-
-    results <- do.call(rbind, results)
-
-    results <- results %>% as.data.frame()
-    
-    n_NAs <- rowSums(is.na(results))
-
-    results <- rowMeans(results, na.rm = T)
-    
-    time <- ncvar_get(data_nc, "time")
-
-    time_units <- ncatt_get(data_nc, "time", "units")$value
-
-    reference_date <- as.Date(sub("days since ", "", time_units))  # Extract the reference date
-
-    results <- data.frame(
-      date = reference_date + time,
-      value = results,
-      n_NAs = n_NAs
-    )
-
-    names(results)[2] <- param
-
-    print(paste0("finished ",n," / ",length(year)))
-
-    results_rbind <- rbind(results_rbind, results)
+  if(param == "swe_tot")
+  {
+    file <- paste0("SNOWGRID-CL_swe_tot_",1990)
   }
 
-  results_param[["catchment_kienstock"]] <- results_rbind
+  if(param == "snow_depth")
+  {
+    file <- paste0("SNOWGRID-CL_snow_depth_",1990)
+  }
 
-  results_final[[paste0(param)]] <- results_param
+  data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
+
+
+  lat <- ncvar_get(data_nc, "lat") %>% # Dimensions: (x, y)
+    as.vector()
+  lon <- ncvar_get(data_nc, "lon") %>%  # Dimensions: (x, y)
+    as.vector()
+
+  coords_spartacus <- data.frame(lat =lat, lon = lon)
+
+  coords_spartacus <- st_as_sf(coords_spartacus, coords = c("lon", "lat"), crs = 4326)  # Start with WGS84 (EPSG:4326)
+
+
+    for (n in year) {
+
+      # file <- paste0("SPARTACUS2-DAILY_",param,"_",n)
+
+      data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
+
+
+      #buffer stations with 5 km radius
+      stations_buffered <- coords_stations %>% filter(station_name == s) %>%
+        st_transform(., crs = 3857)  # Project to meters
+      stations_buffered <- st_buffer(stations_buffered, dist = 5000)  # 5 km buffer
+      stations_buffered <- st_transform(stations_buffered, crs = 4326)  # Back to WGS84
+
+      stations_buffered <- st_join(coords_spartacus, stations_buffered, join = st_intersects, left = FALSE)
+
+      # Get indices of selected points in original coords_spartacus
+      selected_indices <- which(st_coordinates(coords_spartacus)[,1] %in% st_coordinates(stations_buffered)[,1] &
+                                  st_coordinates(coords_spartacus)[,2] %in% st_coordinates(stations_buffered)[,2])
+
+      # stations_spartacus <- coords_spartacus[indices,]
+      # #
+      # stations_spartacus$ID <- coords_stations$hzb_nr
+      # #
+      array <- ncvar_get(data_nc, param)  # Dimensions: (x, y, time)
+
+      results <- list()
+
+      # Loop through each time step
+      for (t in 1:dim(array)[3]) {  # Loop over the time dimension
+        # Extract the 2D slice for the current time step
+        spatial_grid <- array[, , t]
+
+        # Use the indices to extract the values for the grid cells of interest
+        results[[t]] <- spatial_grid[selected_indices]
+      }
+
+      results <- do.call(rbind, results)
+
+      results <- results %>% as.data.frame()
+
+      results <- rowMeans(results)
+
+      time <- ncvar_get(data_nc, "time")
+
+      time_units <- ncatt_get(data_nc, "time", "units")$value
+
+      reference_date <- as.Date(sub("days since ", "", time_units))  # Extract the reference date
+
+      results <- data.frame(
+        date = reference_date + time,
+        value = results
+      )
+
+      names(results)[2] <- param
+      count <- count +1
+      print(paste0("finished ",count," / ",(length(year)*length(params)*length(unique(coords_stations$hzb_nr)))))
+
+      results_rbind <- rbind(results_rbind, results)
+    }
+
+  results_param[[paste0(s)]][[paste0(param)]] <- results_rbind
 
 }
 
 
-results_SA_TN_TX_RR_catchment_kienstock <- results_final
-save(results_SA_TN_TX_RR_catchment_kienstock, file = "data/climate/spartacus_results_SA_TN_TX_RR_catchment_kienstock.RData")
+
+#### repeat the same for the whole upstream catchment for Kienstock station ----
+
+# results_rbind <- NULL
+# 
+#   for (n in year) {
+#     # n <- 1961
+#     # param <- "RR"
+#     file <- paste0("SPARTACUS2-DAILY_",param,"_",n)
+# 
+#     if(param == "swe_tot")
+#       {
+#       file <- paste0("SNOWGRID-CL_swe_tot_",n)
+#     }
+# 
+#     if(param == "snow_depth")
+#     {
+#       file <- paste0("SNOWGRID-CL_snow_depth_",n)
+#     }
+# 
+#     data_nc <- nc_open(paste0(path,param,"/",file,".nc"))
+# 
+#     lat <- ncvar_get(data_nc, "lat") %>% # Dimensions: (x, y)
+#       as.vector()
+#     lon <- ncvar_get(data_nc, "lon") %>%  # Dimensions: (x, y)
+#       as.vector()
+# 
+#     coords_spartacus <- data.frame(lat =lat, lon = lon)
+# 
+#     coords_spartacus <- st_as_sf(coords_spartacus, coords = c("lon", "lat"), crs = 4326)  # Start with WGS84 (EPSG:4326)
+# 
+# 
+#     points_catchment <- st_join(coords_spartacus, catchment_Kienstock_shp, join = st_intersects, left = FALSE)
+# 
+#     # Get indices of selected points in original coords_spartacus
+#     selected_indices <- which(st_coordinates(coords_spartacus)[,1] %in% st_coordinates(points_catchment)[,1] &
+#                                 st_coordinates(coords_spartacus)[,2] %in% st_coordinates(points_catchment)[,2])
+# 
+#     # stations_spartacus <- coords_spartacus[indices,]
+#     # #
+#     # stations_spartacus$ID <- coords_stations$hzb_nr
+#     # #
+#     array <- ncvar_get(data_nc, param)  # Dimensions: (x, y, time)
+# 
+#     results <- list()
+# 
+#     # Loop through each time step
+#     for (t in 1:dim(array)[3]) {  # Loop over the time dimension
+#       # Extract the 2D slice for the current time step
+#       spatial_grid <- array[, , t]
+# 
+#       # Use the indices to extract the values for the grid cells of interest
+#       results[[t]] <- spatial_grid[selected_indices]
+#     }
+# 
+#     results <- do.call(rbind, results)
+# 
+#     results <- results %>% as.data.frame()
+# 
+#     n_NAs <- rowSums(is.na(results))
+# 
+#     results <- rowMeans(results, na.rm = T)
+# 
+#     time <- ncvar_get(data_nc, "time")
+# 
+#     time_units <- ncatt_get(data_nc, "time", "units")$value
+# 
+#     reference_date <- as.Date(sub("days since ", "", time_units))  # Extract the reference date
+# 
+#     results <- data.frame(
+#       date = reference_date + time,
+#       value = results,
+#       n_NAs = n_NAs
+#     )
+# 
+#     names(results)[2] <- param
+# 
+#     print(paste0("finished ",n," / ",length(year)))
+# 
+#     results_rbind <- rbind(results_rbind, results)
+#   }
+# 
+#   results_param[["catchment_Kienstock"]] <- results_rbind
+# 
+#   results_final[[paste0(param)]] <- results_param
+
+}
+
+
+results_snow_stations <- results_param
+save(results_snow_stations, file = "data/climate/spartacus_results_snow_stations.RData")
 
 load( file = "data/climate/spartacus_clipped_SN_TN.RData")
 
@@ -277,10 +301,10 @@ save <- results_final_SA_TN
 # # Buffer 5 km (optional)
 # stations_buffered <- buffer(stations_vect, width = 5000)
 # 
-# if (!inherits(catchment_kienstock_shp, "sf")) {
-#   catchment_kienstock_shp <- st_as_sf(catchment_kienstock_shp)  # just convert if needed
+# if (!inherits(catchment_Kienstock_shp, "sf")) {
+#   catchment_Kienstock_shp <- st_as_sf(catchment_Kienstock_shp)  # just convert if needed
 # }
-# catchment_vect <- vect(st_transform(catchment_kienstock_shp, crs(r)))
+# catchment_vect <- vect(st_transform(catchment_Kienstock_shp, crs(r)))
 # 
 # stations_shp <- c(catchment_vect,stations_buffered)
 # 
@@ -391,7 +415,7 @@ save <- results_final_SA_TN
 #   
 #   
 #   
-#   #### repeat the same for the whole upstream catchment for kienstock station ----
+#   #### repeat the same for the whole upstream catchment for Kienstock station ----
 #   
 #   results_rbind <- NULL
 #   
@@ -411,7 +435,7 @@ save <- results_final_SA_TN
 #     coords_spartacus <- st_as_sf(coords_spartacus, coords = c("lon", "lat"), crs = 4326)  # Start with WGS84 (EPSG:4326)
 #     
 #     
-#     points_catchment <- st_join(coords_spartacus, catchment_kienstock_shp, join = st_intersects, left = FALSE)
+#     points_catchment <- st_join(coords_spartacus, catchment_Kienstock_shp, join = st_intersects, left = FALSE)
 #     
 #     # Get indices of selected points in original coords_spartacus
 #     selected_indices <- which(st_coordinates(coords_spartacus)[,1] %in% st_coordinates(points_catchment)[,1] &
@@ -458,7 +482,7 @@ save <- results_final_SA_TN
 #     results_rbind <- rbind(results_rbind, results)
 #   }
 #   
-#   results_param[["catchment_kienstock"]] <- results_rbind
+#   results_param[["catchment_Kienstock"]] <- results_rbind
 #   
 #   results_final[[paste0(param)]] <- results_param
 #   
@@ -500,7 +524,7 @@ extract_TS_function <- function(parameter,
     stations_buffered <- st_buffer(stations_buffered, dist = buffer_size)  # 5 km buffer
     stations_buffered <- st_transform(stations_buffered, crs = 4326)  # Back to WGS84
     
-    catchment_kienstock_shp <- catchment_kienstock_shp %>%
+    catchment_Kienstock_shp <- catchment_Kienstock_shp %>%
       mutate(
         station_name = "Kienstock_Catchment",
         catchment_size = NA,
@@ -509,7 +533,7 @@ extract_TS_function <- function(parameter,
       ) %>%
       select(station_name, catchment_size, elevation, hzb_nr, geometry)
     
-    stations_buffered <- rbind(stations_buffered, catchment_kienstock_shp)
+    stations_buffered <- rbind(stations_buffered, catchment_Kienstock_shp)
     
     intersected <- st_join(coords_spartacus, stations_buffered, join = st_intersects, left = FALSE)
     intersected$index_in_spartacus <- match(st_coordinates(intersected) %>% as.data.frame() %>% do.call(paste, .),

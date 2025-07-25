@@ -15,7 +15,7 @@ library(patchwork)
 rm(list=ls())
 
 ### name the models and dataset of interest ------
-today <- Sys.Date()-12
+today <- Sys.Date()
 # today <-
 model_name <- c("test_new_stations")
 
@@ -23,7 +23,7 @@ dataset <- "lagged_TB" #TB = Tauchenbach
 # station <- "tauchenbach"
 
 load("results/2025-07-01/Ensemble_Model/Ensemble_Model_lagged_TB_forecasts_list.RData")
-ensemble_df <-   purrr::imap_dfr(forecasts_list, ~ { 
+ensemble_df_all <-   purrr::imap_dfr(forecasts_list, ~ { 
   
   station <- .y
   
@@ -43,7 +43,7 @@ ensemble_df <-   purrr::imap_dfr(forecasts_list, ~ {
 
 
 load("results/2025-07-01/Climate_Upper_Benchmark_lambdamin/Climate_Upper_Benchmark_lambdamin_lagged_TB_forecasts_list.RData")
-upper_BM_df <-   purrr::imap_dfr(forecasts_list, ~ { 
+upper_BM_df_all <-   purrr::imap_dfr(forecasts_list, ~ { 
   
   station <- .y
   
@@ -72,7 +72,7 @@ load(paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"results.
 
 # quantiles <- flow_quantiles_list[[paste0(station)]]
 
-GOF_df <-   purrr::imap_dfr(GOF_list, ~ { 
+GOF_df_all <-   purrr::imap_dfr(GOF_list, ~ { 
   
   station <- .y
   
@@ -88,7 +88,6 @@ GOF_df <-   purrr::imap_dfr(GOF_list, ~ {
   })
 })
 
-coefs_list_final <- list()
 
 forecast_df_all <-   purrr::imap_dfr(forecasts_list, ~ { 
   
@@ -106,6 +105,8 @@ forecast_df_all <-   purrr::imap_dfr(forecasts_list, ~ {
   })
 })
 
+coefs_list_final <- list()
+
 cm_list <- list()
 
 ### Visualizing Cofficients --------------
@@ -118,7 +119,7 @@ if (file.exists(paste0("results/",today,"/",model_name,"/coefficients/"))){
 }
 
 
-n_coefs <-   purrr::imap_dfr(n_coefs_list, ~ { 
+n_coefs_all <-   purrr::imap_dfr(n_coefs_list, ~ { 
   
   station <- .y
   
@@ -242,12 +243,17 @@ lambda_df_all$n_horizon <- lambda_df_all$fc_horizon %>%
   factor(levels = sort(unique(.)))
 
 
-# CREATING FORECAST_DF WITH ALL FC-METHODS and Stations ----
-
+# CREATING FORECAST_DF WITH ALL FC-METHODS for all Stations ----
 temp <- NULL
+forecast_df_long_all <- NULL
+fc_df_quant_GOF <- NULL
+quantiles_all <- NULL
+cum_seg_all <- NULL
+
+
 for(s in unique(forecast_df_all$station)){
-  
-  # station <- "kienstock"
+  # 
+  # s <- "kienstock"
   forecast_df <- forecast_df_all %>% filter(station ==s)
   start_date_GOF <- forecast_df %>% 
     filter(horizon == as.numeric(max(forecast_df$horizon)) & station == s) 
@@ -263,26 +269,24 @@ for(s in unique(forecast_df_all$station)){
 
     
   quantiles <- sapply(1:100, function(x) quantile(df$flow_mean, probs = 1-(x/100))) %>% 
-    data.frame(quant_flow = ., quantile = 1:100)
-  
-  cum_seg_results <- NULL
+    data.frame(quant_flow = ., exceed_prob = 1:100)
   
   mean_obs_tot <- df %>%   filter(Date > start_date_GOF) %>% pull(flow_mean) %>% 
     mean()
-  
+  cum_seg <- NULL
   for(q in 1:100){
     
     # q <- 90
     
-    cum_seq_th <- quantiles %>% filter(q == quantile) 
-    cum_seg <- forecast_df %>% filter(obs < cum_seq_th$quant_flow & station == s)
+    cum_seg_th <- quantiles %>% filter(q == exceed_prob) 
+    cum_seg <- forecast_df %>% filter(obs < cum_seg_th$quant_flow & station == s)
     cum_seg <- cum_seg %>% setDT() %>% 
       .[, {
         mean_pred <- mean(pred)
         mean_obs_tot <- mean_obs_tot
         mean_obs_seg <- mean(obs)
-        ssr <- sum((pred - mean_obs)^2)
-        sstot <- sum((obs - mean_obs)^2)
+        ssr <- sum((pred - mean_obs_tot)^2)
+        sstot <- sum((obs - mean_obs_tot)^2)
         r2 <- 1-(ssr / sstot)
         RMSE = hydroGOF::rmse(sim = pred, obs = obs)
         r2_2 = hydroGOF::R2(sim = pred, obs = obs)
@@ -291,12 +295,14 @@ for(s in unique(forecast_df_all$station)){
       }, by = horizon]
     
     cum_seg$exceed_prob <- q
-    cum_seg_results <- rbind(cum_seg, cum_seg_results)
+    cum_seg$station <- s
+    
+    cum_seg_all <- rbind(cum_seg, cum_seg_all)
   
   }
 
         
-    # CALCULATION OF FLOW QUANTILES ----
+    # ADDING OTHER MODEL FORECASTS ----
     
     forecast_df  <- df %>% rename(date = Date) %>%  select(c("week_year","date")) %>% 
       left_join(forecast_df,.,by = "date")
@@ -306,12 +312,12 @@ for(s in unique(forecast_df_all$station)){
       select(week_year, naive_season) %>%
       left_join(forecast_df,., by = "week_year")
     
-    forecast_df <- ensemble_df %>% filter(ensemble == "ensemble_median" & station == s) %>%  
+    forecast_df <- ensemble_df_all %>% filter(ensemble == "ensemble_median" & station == s) %>%  
       select(c("date","pred","horizon")) %>% 
       rename(ensemble_median = pred) %>% 
       left_join(forecast_df,.,by= (c("date","horizon")))
     
-    forecast_df <- upper_BM_df %>%  filter(station == s) %>% 
+    forecast_df <- upper_BM_df_all %>%  filter(station == s) %>% 
       select(c("date","pred","horizon")) %>% 
       rename(upper_benchmark = pred) %>% 
       left_join(forecast_df,.,by= (c("date","horizon")))
@@ -319,10 +325,11 @@ for(s in unique(forecast_df_all$station)){
     forecast_df <- forecast_df %>% setDT() %>% 
       .[, naive_lag := lag(obs, horizon), by = .(horizon)]
     
-    forecast_df$res <- forecast_df$pred - forecast_df$obs
     forecast_df$station <- s
     temp <- rbind(forecast_df,temp)
-}
+    quantiles$station <- s
+    quantiles_all <- rbind(quantiles_all, quantiles)
+
 
     
     forecast_df_long <- temp %>% rename(catchment_memory_model = pred) %>% 
@@ -330,39 +337,53 @@ for(s in unique(forecast_df_all$station)){
                                                      "catchment_memory_model","naive_lag"), values_to = "pred",
                                             names_to = "fc_method")  
     
+    forecast_df_long$res <- forecast_df_long$pred - forecast_df_long$obs
     
-    fc_df_quant_GOF <- NULL
+    forecast_df_long_all <- rbind(forecast_df_long_all, forecast_df_long)
     
     
     for(q in 1:100){
       
-      # q <- 90
-      
-      cum_seq_th <- quantiles %>% filter(q == quantile) 
-      fc_df_quant <- forecast_df_long %>% filter(obs < cum_seq_th$quant_flow)
+      # q <- 51
+      fc_df_quant <- NULL
+      cum_seg_th <- quantiles_all %>% filter(q == exceed_prob  & station ==s) 
+      fc_df_quant <- forecast_df_long %>% filter(obs < cum_seg_th$quant_flow & station ==s)
       fc_df_quant <- fc_df_quant %>% setDT() %>% 
         .[, {
           mean_pred <- mean(pred)
           mean_obs_tot <- mean_obs_tot
           mean_obs_seg <- mean(obs)
-          ssr <- sum((pred - mean_obs)^2)
-          sstot <- sum((obs - mean_obs)^2)
+          ssr <- sum((pred - mean_obs_tot)^2)
+          sstot <- sum((obs - mean_obs_tot)^2)
           r2 <- 1-(ssr / sstot)
           RMSE = hydroGOF::rmse(sim = pred, obs = obs)
+          RRMSE_seg = RMSE/mean_obs_seg
           r2_2 = hydroGOF::R2(sim = pred, obs = obs)
           
           .(r2= r2,RMSE= RMSE, mean_pred = mean_pred, mean_obs_seg = mean_obs_seg, mean_obs_tot = mean_obs_tot,r2_2 =r2_2)
         }, by = .(horizon, fc_method, station)]
       
       fc_df_quant$exceed_prob <- q
+      fc_df_quant$station <- s
+      
       fc_df_quant_GOF <- rbind(fc_df_quant, fc_df_quant_GOF)
       
     }
+}
 
-# START LOOP ----
-for (s  in unique(coefs_df_all$station)) {
+forecast_df_all <- temp
+cum_seg_all <- left_join(cum_seg_all , quantiles_all, by = c("exceed_prob","station"))
+
+# test <- fc_df_quant_GOF %>% filter(station ==s &horizon ==1 & fc_method =="naive_season", exceed_prob ==50)
+
+
+
+# test <- forecast_df_long_all %>% filter(station ==s &horizon ==1 & fc_method =="naive_season")
+
+# START LOOP FOR PLOTTING ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+for (s  in unique(forecast_df_all$station)) {
   
-  s <- "kienstock"
+  # s <- "tauchenbach"
   coefs_df <- coefs_df_all %>% filter(station ==s)
   top_coefs <- coefs_df_all %>% filter(station == s) %>% setDT() %>% 
     .[variable != "(Intercept)", .(coefs = sum(abs(coefs))), by = variable]
@@ -407,11 +428,11 @@ for (s  in unique(coefs_df_all$station)) {
   #### Error LINES Version 1 ----
   
   
-  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_lines_shadings.png"),
+  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_lines_shadings",s,".png"),
       width = 1000, height = 600, units = "px")
   
-  coefs_df %>%
-    filter(variable %in% top_coefs[1:16]) %>%
+plot <-   coefs_df_all %>%
+    filter(variable %in% top_coefs[1:16] & station ==s) %>%
     mutate(variable = factor(variable, levels = top_coefs)) %>%
     ggplot(aes(x = as.numeric(n_horizon), y = coefs, group = 1)) +
     geom_ribbon(aes(ymin = coefs_lb, ymax = coefs_ub), alpha = 0.8, fill = "gray") +
@@ -422,16 +443,17 @@ for (s  in unique(coefs_df_all$station)) {
     labs(x= "Forecasting Horizon [weeks]",
          y = "Variable Coefficients",
          title = "Variable Coefficients vs. Forecasting Horizons",
-         subtitle = paste0("Model: ", model_name, " from: ", Sys.Date()))+
+         subtitle = paste0("Model: ", model_name, " from: ", Sys.Date()," station = ",s))+
     scale_x_continuous(breaks = seq(1,12,1))
+print(plot)
   dev.off()
   #### Error BARS Version 2 ----
   
-  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_error_bars.png"),
+  png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_error_bars_",s,".png"),
       width = 1000, height = 600, units = "px")
   
-  coefs_df %>%
-    filter(variable %in% top_coefs[1:16]) %>%
+plot <-   coefs_df_all %>%
+    filter(variable %in% top_coefs[1:16] & station ==s) %>%
     mutate(variable = factor(variable, levels = top_coefs)) %>% 
     ggplot(aes(x = n_horizon, y = coefs, fill = n_horizon)) +
     
@@ -447,7 +469,7 @@ for (s  in unique(coefs_df_all$station)) {
       x = "Forecasting Horizon [weeks]",
       y = "Variable Coefficients",
       title = paste0("Variable Coefficients vs. Forecasting Horizons"),
-      subtitle = paste0("Model: ", model_name, " from: ", Sys.Date())
+      subtitle = paste0("Model: ", model_name, " from: ", Sys.Date()," station = ",s)
     ) +
     theme_bw() +                                                            
     theme(
@@ -455,6 +477,7 @@ for (s  in unique(coefs_df_all$station)) {
       axis.text = element_text(size = 12),
       strip.text = element_text(size = 14, face = "bold"),
       legend.position = "none")
+print(plot)
   dev.off()
   
 
@@ -465,22 +488,28 @@ for (s  in unique(coefs_df_all$station)) {
 
 
 lambda_df <- lambda_df_all %>% filter(station == s)
-
+n_CV_folds <- results[[paste0(s)]][["fc_horizon_1"]][["params"]][["n_CV_folds"]]
+  
 SE.factor <- results[[paste0(s)]][["fc_horizon_1"]][["params"]][["SE.factor"]]
 
 lambda_min <- lambda_df %>%
   group_by(fc_horizon) %>%
-  slice_min(RMSE, n = 1) %>%
-  ungroup() %>%
+  filter(RMSE == min(RMSE)) %>%
+  slice(1) %>%  ungroup() %>%
   select(fc_horizon, lambda_min = lambda, RMSE = RMSE, RMSESD = RMSESD)
 
-lambda_min$threshold <- lambda_min$RMSE + lambda_min$RMSESD * SE.factor #labelled as SD but actaully represents the Standard Error
+lambda_min$threshold <- lambda_min$RMSE + ((lambda_min$RMSESD/sqrt(n_CV_folds)) * SE.factor) #labelled as SD but actaully represents the Standard Error
 
 lambda.1se_graf <- as.numeric(c(rep(NA,(max(lambda_min$fc_horizon)))))
+lambda.opt <- as.numeric(c(rep(NA,(max(lambda_min$fc_horizon)))))
 
 for(h in 1:nrow(lambda_min)){
   
   temp <- lambda_df[which(lambda_df$fc_horizon == h),]
+  # if()
+  #add lambda_opt
+  lambda.opt[h] <- results[[paste0(s)]][["fc_horizon_1"]][["params"]][["lambda_opt"]]
+  
   temp <- temp[temp$RMSE <= lambda_min$threshold[h],]
   lambda.1se_graf[h] <- temp$lambda[which.max(temp$lambda)]
   
@@ -488,7 +517,8 @@ for(h in 1:nrow(lambda_min)){
 
 lambda_1se_df <- tibble(
   fc_horizon = lambda_min$fc_horizon,
-  lambda_1se = lambda.1se_graf  )
+  lambda_1se = lambda.1se_graf,
+  lambda.opt = lambda.opt)
 
 lambda_lines  <- lambda_min %>%
   select(fc_horizon, lambda_min) %>%
@@ -496,6 +526,58 @@ lambda_lines  <- lambda_min %>%
 
 lambda_df$RMSE_lb <- lambda_df$RMSE-lambda_df$RMSESD
 lambda_df$RMSE_ub <- lambda_df$RMSE+lambda_df$RMSESD
+
+
+h <- 8
+lambda_df %>% filter(fc_horizon ==h) %>% 
+  ggplot(aes(x = log10(lambda), y = RMSE)) +
+  geom_line() +
+  geom_vline(
+    data = lambda_lines,
+    aes(xintercept = log10(lambda_min[h])),
+    linetype = "dashed", color = "steelblue"
+  ) +
+  geom_vline(
+    data = lambda_lines,
+    aes(xintercept = log10(lambda_1se[h])),
+    linetype = "dashed", color = "forestgreen"
+  ) +
+  geom_vline(
+    data = lambda_lines,
+    aes(xintercept = log10(lambda.opt[h])),
+    linetype = "dashed", color = "red"
+  ) +
+  labs(title = paste0("RMSE across log10(lambda) per forecast horizon in ", model_name," | ",s, " | ",Sys.Date()),
+       subtitle = "Blue = lambda.min, Green = lambda.1se",
+       x = "log10(lambda)", y = "RMSE") +
+  theme_minimal()
+
+wtest <- lambda_df %>% filter(fc_horizon ==h)
+
+
+
+
+
+
+
+
+
+
+
+lambda_lines_long <- lambda_lines %>%
+  pivot_longer(cols = c(lambda_min, lambda_1se, lambda.opt), 
+               names_to = "lambda_type", 
+               values_to = "lambda_value") %>%
+  mutate(color_label = case_when(
+    lambda_type == "lambda_min" ~ "lambda.min",
+    lambda_type == "lambda_1se" ~ "lambda.1se",
+    lambda_type == "lambda.opt" ~ "lambda.opt"
+  ))
+
+
+
+
+
 
 png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_lambda_plot_",s,".png"),
     width = 1000, height = 600, units = "px")
@@ -507,19 +589,46 @@ plot <- lambda_df %>%
   geom_line(aes(y = RMSE_lb), color = "darkred", linetype = "dotted") +
   geom_line(aes(y = RMSE_ub), color = "darkred", linetype = "dotted") +
   geom_vline(
-    data = lambda_lines,
-    aes(xintercept = log10(lambda_min)),
-    linetype = "dashed", color = "steelblue"
+    data = lambda_lines_long,
+    aes(xintercept = log10(lambda_value), color = color_label),
+    linetype = "dashed"
   ) +
-  geom_vline(
-    data = lambda_lines,
-    aes(xintercept = log10(lambda_1se)),
-    linetype = "dashed", color = "forestgreen"
+  labs(
+    title = paste0("RMSE across log10(lambda) per forecast horizon in ", model_name," | ",s, " | ",Sys.Date()),
+    subtitle = "Red = lambda.min, Steelblue = lambda.1se, Green = lambda.opt",
+    x = "log10(lambda)", y = "RMSE", color = "Lambda Type"
   ) +
-  labs(title = paste0("RMSE across log10(lambda) per forecast horizon in ", model_name," | ",s, " | ",Sys.Date()),
-       subtitle = "Blue = lambda.min, Green = lambda.1se",
-       x = "log10(lambda)", y = "RMSE") +
-  theme_minimal()
+  scale_color_manual(
+    values = c("lambda.min" = "red", "lambda.1se" = "steelblue", "lambda.opt" = "forestgreen")
+  ) +
+  theme_minimal() 
+# plot <- lambda_df %>%
+#   ggplot(aes(x = log10(lambda), y = RMSE)) +
+#   geom_line() +
+#   facet_wrap(~fc_horizon) +
+#   geom_line(aes(y = RMSE_lb), color = "darkred", linetype = "dotted") +
+#   geom_line(aes(y = RMSE_ub), color = "darkred", linetype = "dotted") +
+#   geom_vline(
+#     data = lambda_lines,
+#     aes(xintercept = log10(lambda_min)),
+#     linetype = "dashed", color = "lambda.min"
+#   ) +
+#   geom_vline(
+#     data = lambda_lines,
+#     aes(xintercept = log10(lambda_1se)),
+#     linetype = "dashed", color = "lambda.1se"
+#   ) +
+#   geom_vline(
+#     data = lambda_lines,
+#     aes(xintercept = log10(lambda.opt[h])),
+#     linetype = "dashed", color = "lambda.opt"
+#   ) +
+#   labs(title = paste0("RMSE across log10(lambda) per forecast horizon in ", model_name," | ",s, " | ",Sys.Date()),
+#        subtitle = "Blue = lambda.min, Green = lambda.1se",
+#        x = "log10(lambda)", y = "RMSE") +
+#   scale_color_manual(labels = c("lambda.min" ,"lambda.1se","lambda_opt"),
+#                      values = c("red","steelblue","forestgreen"))+
+#   theme_minimal()
 print(plot)
 dev.off()
 
@@ -531,8 +640,11 @@ if (file.exists(paste0("results/",today,"/",model_name,"/GOF/"))){
   dir.create(file.path(paste0("results/",today,"/",model_name,"/GOF/")))
 }
 
-
-cum_seg_results %>% 
+if (file.exists(paste0("results/",today,"/",model_name,"/hydrographs/"))){
+} else {
+  dir.create(file.path(paste0("results/",today,"/",model_name,"/hydrographs/")))
+}
+cum_seg_all %>% 
   filter(horizon==5) %>% 
   ggplot() +
   # geom_line(aes(x = exceed_prob, y = mean_pred, color = "Predicted Mean"))+
@@ -541,15 +653,13 @@ cum_seg_results %>%
   geom_line(aes(x = exceed_prob, y = r2, color = "r2"))+
   geom_line(aes(x = exceed_prob, y = r2_2, color = "r2_2"))
 
-quantile_y_intercept <- quantiles %>% filter(quantile %in% seq(10,100,10)) %>% pull(quant_flow)
-ylims <- df %>% filter(Date > start_date_GOF) %>% pull(flow_mean) %>% range()
+quantile_y_intercept <- quantiles_all %>% filter(exceed_prob %in% seq(10,100,10) & station == s) %>% pull(quant_flow)
+ylims <- forecast_df_all %>% filter(date > start_date_GOF & station ==s) %>% pull(obs) %>% range()
 
-
-
-p1 <- df %>%
-  filter(year > 2015) %>%
+p1 <- forecast_df_all %>%
+  filter(lubridate::year(date) > 2015 & station ==s) %>%
   ggplot() +
-  geom_line(aes(x = Date, y = flow_mean, color = "Observed Flow [m3/s]"), linewidth = 1) +
+  geom_line(aes(x = date, y = obs, color = "Observed Flow [m3/s]"), linewidth = 1) +
   geom_hline(yintercept = quantile_y_intercept, linetype = "dashed", aes(color = "Flow Quantiles [m3/s]",)) +
   scale_color_manual(values = c("Observed Flow [m3/s]" = "steelblue","Flow Quantiles [m3/s]" = "lightgrey")) +
   lims(y = ylims)+
@@ -563,15 +673,14 @@ p1 <- df %>%
     # subtitle = "Grey line indicates Observed Flow"
   ) 
 
-p2 <- cum_seg_results %>% 
-  filter(horizon == 9) %>% 
-  filter(exceed_prob %in% seq(10,100,10)) %>% 
-  ggplot()+
-  geom_point(aes(y = mean_obs_seg, x = RMSE)) +
-  lims(y = ylims)+
-  
-  # geom_text(aes(label = quantile), hjust = 0) +
-  # scale_y_continuous(limits = range(df$flow_mean, quant_data$quant_flow)) +
+p2 <- cum_seg_all %>%
+  filter(horizon == 9 & station == s) %>%
+  filter(exceed_prob %in% seq(10, 100, 10)) %>%
+  arrange(quant_flow) %>%  # sort by y-axis variable
+  ggplot() +
+  geom_path(aes(y = quant_flow, x = RMSE)) +  # connects points in order of data
+  geom_point(aes(y = quant_flow, x = RMSE)) +  # add points on top
+  lims(y = ylims) +
   theme_bw() +
   theme(
     plot.margin = margin(5, 0, 5, 0),
@@ -594,23 +703,17 @@ dev.off()
 
 ##### Hydrographs of predicted vs. observed flows ---------
 
-
-if (file.exists(paste0("results/",today,"/",model_name,"/hydrographs/"))){
-} else {
-  dir.create(file.path(paste0("results/",today,"/",model_name,"/hydrographs/")))
-}
-
 png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrogaphs_facet_",s,".png"),
     width = 1000, height = 600, units = "px")
 
 
-plot <- forecast_df %>% 
+plot <- forecast_df_all %>% 
   filter(lubridate::year(date) == 2021) %>% 
   filter(station == s) %>% 
   ggplot(aes(x = date, y = pred, color = factor(horizon))) +  # Forecast lines colored by horizon
-  geom_line(size = 1.2) +  # Slightly thicker forecast lines
-  geom_line(aes(y = obs), color = "grey", linetype = "solid", size = 1.2) +  # Darker grey for observed line
-  facet_grid(horizon ~ ., scales = "free_y") +  # Facet by horizon, free y-axis
+  geom_line(linewidth = 1.2) +  # Slightly thicker forecast lines
+  geom_line(aes(y = obs), color = "grey", linetype = "solid", linewidth = 1.2) +  # Darker grey for observed line
+  facet_wrap(~horizon_char) +  # Facet by horizon, free y-axis
   labs(
     y = "Monthly Low Flow [m³/s]",
     x = "Date",
@@ -639,15 +742,15 @@ print(plot)
 dev.off()
 
 
-png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrographs_stacked",s,".png"),
+png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrographs_stacked_",s,".png"),
     width = 1000, height = 600, units = "px")
 
-plot <- forecast_df %>% 
+plot <- forecast_df_all %>% 
   filter(lubridate::year(date) == 2015) %>% 
   filter(station == s) %>% 
   ggplot(aes(x = date, y = pred, color = factor(horizon))) +  # Forecast colored by horizon
-  geom_line(size = 1.2, alpha = 0.9) +  # Thicker, slightly transparent forecast lines
-  geom_line(aes(y = obs), color = "darkgrey", linetype = "solid", size = 1.4, alpha = 1) +  # Dark grey observed line
+  geom_line(linewidth = 1.2, alpha = 0.9) +  # Thicker, slightly transparent forecast lines
+  geom_line(aes(y = obs), color = "darkgrey", linetype = "solid", linewidth = 1.4, alpha = 1) +  # Dark grey observed line
   labs(
     y = "Monthly Low Flow [m³/s]",
     x = "Date",
@@ -680,14 +783,15 @@ dev.off()
 
 png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_hydrographs_stacked",s,".png"),
     width = 1000, height = 600, units = "px")
-
+test <- fc_df_quant_GOF %>% filter(station ==s & horizon ==1 & exceed_prob == 50)
 plot <-
   fc_df_quant_GOF %>% 
+  filter(station == s) %>% 
   ggplot() +
   geom_line(aes(x = exceed_prob, y = RMSE, color = fc_method), linewidth = 1)+
   facet_wrap(~horizon) +
   theme_bw()+
-  lims(y = range(fc_df_quant_GOF$RMSE))+
+  lims(y = fc_df_quant_GOF %>% filter(station ==s) %>% pull(RMSE) %>% range())+
   labs(
     y = "RMSE [m³/s]",
     x = "Exceedance Probability [%]",
@@ -725,12 +829,12 @@ dev.off()
 png(file=paste0("results/",today,"/",model_name,"/hydrographs/",model_name,"_stratified_GOF_",s,".png"),
     width = 1000, height = 600, units = "px")
 
-plot <- fc_df_quant_GOF %>% filter(exceed_prob %in% c(1,50,80,95)) %>% 
+plot <- fc_df_quant_GOF %>% filter(exceed_prob %in% c(1,50,80,95) & station ==s) %>% 
   ggplot()+
   geom_line(aes(x=horizon, y = RMSE, color = fc_method),linewidth = 1) +
   theme_bw()+
   facet_wrap(~exceed_prob)+
-  lims(y = range(fc_df_quant_GOF$RMSE))+
+  lims(y = fc_df_quant_GOF %>% filter(station ==s) %>% pull(RMSE) %>% range())+
   labs(
     y = "RMSE [m³/s]",
     x = "Forecasting Horizon",
@@ -765,32 +869,33 @@ fc_df_quants <- NULL
 
 for (q in c(1,50,80,95)) {
   
-  th <- quantiles %>% filter(quantile == q) %>% pull(quant_flow)
+  th <- quantiles %>% filter(exceed_prob == q) %>% pull(quant_flow)
   temp <- forecast_df_long %>% filter(obs < q)
   temp$exceed_prob <- q
   fc_df_quants <- rbind(temp, fc_df_quants)
   
-}
 
 
 
-png(file=paste0("results/",today,"/",model_name,"/GOF/",model_name,"_residuals_boxplot_model_comparison.png"),
+
+png(file=paste0("results/",today,"/",model_name,"/GOF/",model_name,"_residuals_boxplot_model_comparison_",s,".png"),
     width = 1000, height = 600, units = "px")
 
-plot <- fc_df_quants %>% 
-  filter(fc_method != "naive_season") %>% 
+plot <- forecast_df_long_all %>% 
+  filter(fc_method != "naive_season" & station ==s) %>% 
   filter(horizon %in% seq(1,12,2)) %>% 
   ggplot() +
   geom_boxplot(aes(x=as.factor(horizon), y = res,fill =fc_method), color = "black" )+
   # facet_wrap(~quantile)+
   labs(title = "Residuals per Forecasting Horizons",
-       subtitle = "Comparison of Naive Models with Elastic Net Model | Residuals = Predicted - Observed" ,
+       subtitle = "Comparison of Naive Models with Elastic Net Model | Residuals = Predicted - Observed | ",s ,
        x = "Forecasting Horizons [weeks]",
        y = "Residuals [m^3/s]")+
   theme_bw()
 print(plot)
 dev.off()
 
+}
 # 
 # png(file=paste0("results/",today,"/",model_name,"/GOF/",model_name,"_residuals_naive_models.png"),
 #     width = 1000, height = 600, units = "px")
@@ -890,61 +995,61 @@ fc_df_quants %>%
 
 
 #### Summary Table ----------
-
-summary_table <- fc_df_quant %>% 
-  # filter(quantile == "all_data") %>% 
-  mutate(RMSE_scaled_season = (RMSE))
-  select(c("horizon","R2","RMSE","RMSE_scaled_season","RMSE_scaled_lag"))
-
-n_coefs <- rownames_to_column(n_coefs)
-
-names(n_coefs) <- c("horizon", "n_coefs")
-
-n_coefs$horizon <- gsub("fc_horizon_", "", n_coefs$horizon)
-
-n_coefs$horizon <- as.numeric(n_coefs$horizon)
-
-summary_table$horizon <- as.numeric(summary_table$horizon)
-
-summary_table <- merge(summary_table, n_coefs, by = "horizon")
-
-# summary_table$lambda.applied <- summary_table$lambda.value[1]
-setcolorder(summary_table, c("horizon", "R2", "RMSE", "RMSE_scaled_season","RMSE_scaled_lag", 
-                             # "lambda.applied",
-                             "n_coefs"))
-
-# Create a basic gt table
-gt_table <- gt(summary_table) %>%
-  tab_header(
-    title = "Summary Statistics of Monthly Forecasting Performance",
-    subtitle = paste0("Model: ", model_name," ",as.Date(Sys.time()))
-  ) %>%
-  fmt_number(
-    columns = c(R2, RMSE, RMSE_scaled_season,RMSE_scaled_lag),
-    decimals = 2
-  ) %>%
-  cols_label(
-    horizon = md("Forecasting<br>Horizon<br>(weeks)"),
-    R2 = md("R²"),
-    RMSE = md("RMSE"),
-    # lambda.value = md("Optimal<br>Lambda"),
-    # lambda.applied = md("Applied<br>Lambda"),
-    n_coefs = md("Optimal Number<br>of Coefficients"),
-    RMSE_scaled_season = md("RMSE_scaled_season"),
-    RMSE_scaled_lag = md("RMSE_scaled_lag")
-  ) %>%
-  tab_style(
-    style = list(
-      cell_text(weight = "bold")
-    ),
-    locations = cells_column_labels(everything())
-  ) 
-# tab_footnote(
-#   footnote = "For forcasting of all months, the paramters for lamdba and number of coefficients of the forecasting horizon = 1 and not the optimal values were applied.",
-#   locations = cells_title(groups = "title")
-# )
-print(gt_table)
-gtsave(gt_table, paste0("results/",today,"/",model_name,"/summary_table_forecasts.png"))
+# 
+# summary_table <- fc_df_quant %>% 
+#   # filter(quantile == "all_data") %>% 
+#   mutate(RMSE_scaled_season = (RMSE))
+#   select(c("horizon","R2","RMSE","RMSE_scaled_season","RMSE_scaled_lag"))
+# 
+# n_coefs <- rownames_to_column(n_coefs)
+# 
+# names(n_coefs) <- c("horizon", "n_coefs")
+# 
+# n_coefs$horizon <- gsub("fc_horizon_", "", n_coefs$horizon)
+# 
+# n_coefs$horizon <- as.numeric(n_coefs$horizon)
+# 
+# summary_table$horizon <- as.numeric(summary_table$horizon)
+# 
+# summary_table <- merge(summary_table, n_coefs, by = "horizon")
+# 
+# # summary_table$lambda.applied <- summary_table$lambda.value[1]
+# setcolorder(summary_table, c("horizon", "R2", "RMSE", "RMSE_scaled_season","RMSE_scaled_lag", 
+#                              # "lambda.applied",
+#                              "n_coefs"))
+# 
+# # Create a basic gt table
+# gt_table <- gt(summary_table) %>%
+#   tab_header(
+#     title = "Summary Statistics of Monthly Forecasting Performance",
+#     subtitle = paste0("Model: ", model_name," ",as.Date(Sys.time()))
+#   ) %>%
+#   fmt_number(
+#     columns = c(R2, RMSE, RMSE_scaled_season,RMSE_scaled_lag),
+#     decimals = 2
+#   ) %>%
+#   cols_label(
+#     horizon = md("Forecasting<br>Horizon<br>(weeks)"),
+#     R2 = md("R²"),
+#     RMSE = md("RMSE"),
+#     # lambda.value = md("Optimal<br>Lambda"),
+#     # lambda.applied = md("Applied<br>Lambda"),
+#     n_coefs = md("Optimal Number<br>of Coefficients"),
+#     RMSE_scaled_season = md("RMSE_scaled_season"),
+#     RMSE_scaled_lag = md("RMSE_scaled_lag")
+#   ) %>%
+#   tab_style(
+#     style = list(
+#       cell_text(weight = "bold")
+#     ),
+#     locations = cells_column_labels(everything())
+#   ) 
+# # tab_footnote(
+# #   footnote = "For forcasting of all months, the paramters for lamdba and number of coefficients of the forecasting horizon = 1 and not the optimal values were applied.",
+# #   locations = cells_title(groups = "title")
+# # )
+# print(gt_table)
+# gtsave(gt_table, paste0("results/",today,"/",model_name,"/summary_table_forecasts.png"))
 
 }
 

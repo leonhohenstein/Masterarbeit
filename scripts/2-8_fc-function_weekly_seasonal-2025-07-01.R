@@ -16,7 +16,6 @@ stations_list <- c(
   "flattach",
   "uttendorf")
 
-dataset <- "lagged_TB" #TB = Tauchenbach
 # load(file = paste0("data/tauchenbach/models/",dataset,"_weekly_data.RData"))
 
 #create empty lists to store the results of all catchments
@@ -30,7 +29,7 @@ GOF_list <- list()
 
 for(station in stations_list){
   
-  # station <- "kienstock"
+  station <- "tauchenbach"
   
   if(station == "kienstock"){
     load(file =  paste0("data/",station,"/Final_df_","catchment_kienstock","_weekly.RData"))
@@ -72,33 +71,35 @@ for(station in stations_list){
                                     
                                     "week_tot","Tmin", "Tmax", "snowcover", "precipitation", "sunshine", "rET", 
                                     
-                                    "sin_month", "cos_month", "sin_week", "cos_week" ,"ao_last",       "ao_mean",      
-                                    "pna_last",      "pna_mean",      "ONI_last",      "ONI_mean",      "SOI_last",      "SOI_mean",      "NPGO_last",    
-                                    "NPGO_mean",        "flow_ma2",      "diff_ma2" ,    
+                                    "sin_month", "cos_month", "sin_week", "cos_week" ,"AO_last",       "AO_mean",      
+                                    "PNA_last",      "PNA_mean",      "ONI_last",      "ONI_mean",      "SOI_last",      "SOI_mean",      "NAO_last",    
+                                    "NAO_mean",        "flow_ma2",      "diff_ma2" ,    
                                     "flow_ma4",      "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",       "flow_spline")))
-  
   
   x <- x %>% drop_na()
   
   
-  
-  colnames(x) <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month", 
+  x <- x %>% rename(date = Date, flow = flow_mean, cwb1 = WB_1week, cwb2 = WB_2week, cwb3 = WB_3week, 
+                    
+                    cwb6 = WB_6week, cwb12 = WB_12week, cwb24 = WB_24week, cwb52 = WB_52week, month = month, 
                    
-                   "year", "week_year","week_tot", "Tmin", "Tmax", "snow", "prec", "sun", "rET",
-                   "sin_month",   "cos_month","sin_week", "cos_week",
-                   "ao_last",
-                   "ao_mean",       "pna_last",      "pna_mean",      "ONI_last",      "ONI_mean",      
-                   "soi_last",      "soi_mean",      "npgo_last",   "npgo_mean",      
-                   "flow_ma2",      "diff_ma2" , "flow_ma4",      
-                   "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2", 
-                   "flow_spline" )
+                    year = year, week_year = week_year, week_tot = week_tot, Tmin = Tmin, Tmax = Tmax, snow = snowcover,
+                    
+                    prec = precipitation, sun = sunshine, rET = rET,  sin_month = sin_month, cos_month = cos_month, 
+                    
+                    sin_week = sin_week, cos_week = cos_week , ao_last = AO_last, ao_mean = AO_mean, pna_last = PNA_last,
+                    
+                    pna_mean = PNA_mean, oni_last = ONI_last,  oni_mean = ONI_mean, soi_last = SOI_last, soi_mean = SOI_mean,     
+                    nao_mean = NAO_mean, flow_ma2 = flow_ma2, diff_ma2 = diff_ma2 ,    nao_last =  NAO_last,   
+                    flow_ma4 = flow_ma4,  diff_ma4 = diff_ma4,     flow_ma8 =  flow_ma8,   diff_ma8 =   diff_ma8,      
+                    deriv_1 = deriv_1,      deriv_2 = deriv_2,      flow_spline = flow_spline)
+
   
   if(station == "kienstock"){
     x <- left_join(x, df_cat, by = "date")
   }
   
-  
-  
+ 
   #when defining the arguments in the "get_forecasts" function
   
   vn <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month", 
@@ -106,8 +107,8 @@ for(station in stations_list){
           "year", "week_year","week_tot", "Tmin", "Tmax", "snow", "prec", "sun", "rET",
           "sin_month",   "cos_month","sin_week", "cos_week",
           "ao_last",
-          "ao_mean",       "pna_last",      "pna_mean",      "ONI_last",      "ONI_mean",      
-          "soi_last",      "soi_mean",      "npgo_last",   "npgo_mean",      
+          "ao_mean",       "pna_last",      "pna_mean",      "oni_last",      "oni_mean",      
+          "soi_last",      "soi_mean",      "nao_last",   "nao_mean",      
           "flow_ma2",      "diff_ma2" , "flow_ma4",      
           "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2", 
           "flow_spline" )
@@ -137,6 +138,16 @@ for(station in stations_list){
                   "Tmin_cat",  "Tmax_cat",  "sun_cat",   "snow_cat" , "rET_cat"  ))
   }
   
+  ### create customized summary function for CV-Evaluation ----
+  
+  customSummary <- function(data, lev = NULL, model = NULL) {
+    mae_val <- MAE(data$obs, data$pred)
+    rmse_val <- RMSE(data$obs, data$pred)
+    mse_val <- mean((data$obs - data$pred)^2)
+    
+    out <- c(MAE = mae_val, RMSE = rmse_val, MSE = mse_val)
+    return(out)
+  }
   
     ### calculate lags ----
   calculate_lags2 <- function(df, var, lags) {
@@ -152,7 +163,7 @@ for(station in stations_list){
   
   # CREATE FORECASTING FUNCTION ----
   
-  get_forecast <- function(x, resp, horizon, var_names, filter_year = 2014, var_names_lagged = NULL, lags = NULL, 
+  get_forecast <- function(x, resp, horizon, var_names, test_years, var_names_lagged = NULL, lags = NULL, 
                            diff_lag = FALSE, temp_res = c("week"), stepsize, obj_fnct, transform = NULL,
                            rolling_window = TRUE, seasonality = FALSE, vn_interaction = NULL,
                            lambda_opt = "lambda.min", SE.factor = 1, interaction = "automatic")
@@ -241,9 +252,9 @@ for(station in stations_list){
     
     x <- x %>% drop_na()
     
-    xtrain <- x %>% filter(year <= filter_year)
+    xtrain <- x %>% filter(!year %in% test_years)
     
-    xtest <- x %>% filter(year > filter_year)
+    xtest <- x %>% filter(year %in% test_years)
     
     nr <- nrow(xtrain)
     
@@ -253,7 +264,7 @@ for(station in stations_list){
     
     X <- as.matrix(xtrain[var_names])
     
-    n_exclude <- 12 #number of timesteps to leave out from the training data after the validation in the training process
+    n_exclude <- 52 #number of timesteps to leave out from the training data after the validation in the training process
     
     
     
@@ -277,7 +288,8 @@ for(station in stations_list){
         
         slices$train[[i]] <- setdiff(1:nrow(xtrain), c(test_set, exclude_range))
         
-        tc <- trainControl(method = "cv", index = slices$train)
+        tc <- trainControl(method = "cv", index = slices$train, summaryFunction = customSummary,
+                           savePredictions = "final")
         
       }
       
@@ -293,7 +305,8 @@ for(station in stations_list){
         fixedWindow = rolling_window  # TRUE for rolling, FALSE for growing
       )
       
-      tc <- trainControl(method = "cv", index = slices$train)
+      tc <- trainControl(method = "cv", index = slices$train, summaryFunction = customSummary,
+                         savePredictions = "final")
       
       # tc <- trainControl(method = "timeslice", initialWindow = iw, fixedWindow = FALSE,
       #                    
@@ -328,7 +341,7 @@ for(station in stations_list){
         method = "glmnet",  # Elastic net
         family = "gaussian",
         trControl = tc,
-        tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(from = -1, to = -7, length.out = 150)),
+        tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(from = 0, to = -5, length.out = 150)),
         preProc = c("center", "scale"),
         metric = obj_fnct
       )
@@ -339,22 +352,49 @@ for(station in stations_list){
     {
       m <- caret::train(x = X, y = y, method = "glmnet", family = "gaussian", 
                         
-                        trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(from = -1, to = -7, length.out = 150)), 
+                        trControl = tc, tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(from = 0, to = -5, length.out = 150)), 
                         
                         preProc = c("center", "scale"), metric = obj_fnct)
     }
     
     global_optimization_results <- m$results
+
+    global_optimization_results %>% mutate(MAE_UB = MAE + MAESD) %>%
+      ggplot()+
+      geom_line(aes(x=log10(lambda), y = MAE))+
+      geom_col(aes(x=log10(lambda), y = MAE_UB), alpha = 0.5)
+
+    global_optimization_results %>% mutate(MAE_UB = MAE + MAESD) %>%
+      ggplot()+
+      geom_line(aes(x=log10(lambda), y = MAE))+
+      geom_col(aes(x=log10(lambda), y = MAE_UB), alpha = 0.5)
+
+    global_optimization_results %>% mutate(MSE_UB = MSE + MSESD) %>%
+      ggplot()+
+      geom_line(aes(x=log10(lambda), y = MSE))+
+      geom_col(aes(x=log10(lambda), y = MSE_UB), alpha = 0.5)
+
+    test <- global_optimization_results %>% mutate(RMSE_div = RMSESD/RMSE, MAE_div = MAESD/MAE,MSE_div = MSESD/MSE)
+    test %>%
+      ggplot+
+      geom_line(aes(x = log10(lambda), y = RMSE_div, color = "steelblue"))+
+      geom_line(aes(x = log10(lambda), y = MAE_div, color = "red"))+
+      geom_line(aes(x = log10(lambda), y = MSE_div, color = "green"))
+
+
+    
+    
+    
     
     #### extraction of lambdas ----
     
-    lambda.min <- m$results$lambda[which.min(m$results$RMSE)]
+    lambda.min <- m$results$lambda[which.min(m$results$MSE)]
     
-    # threshold_1 <- min(m$results$RMSE) + (m$results$RMSESD[1]* SE.factor) #labelled as SD but actaully represents the Standard Error
+    # threshold_1 <- min(m$results$MAE) + (m$results$MAESD[1]* SE.factor) #labelled as SD but actaully represents the Standard Error
     
-    threshold <- min(m$results$RMSE) + ((m$results$RMSESD[which.min(m$results$RMSE)] /sqrt(k)) * SE.factor) #labelled as SD but actaully represents the Standard Error
+    threshold <- min(m$results$MSE) + ((m$results$MSESD[which.min(m$results$MSE)] /sqrt(k)) * SE.factor) #labelled as SD but actaully represents the Standard Error
     
-    temp <- m$results[m$results$RMSE <= threshold,]
+    temp <- m$results[m$results$MSE <= threshold,]
     
     lambda.1se <- temp$lambda[which.max(temp$lambda)]
     
@@ -429,9 +469,6 @@ for(station in stations_list){
       if(seasonality == T)
         
       {
-        
-        # xtrain <- xtrain %>%  select(-"date")
-        
         predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
         interaction_terms <- paste(predictors, "* season", collapse = " + ")
         formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
@@ -439,9 +476,7 @@ for(station in stations_list){
         if(interaction == "manual"){
           formula <- interactions_manual
         }
-        
-        
-        m <- caret::train(
+          m <- caret::train(
           # formula = formula,  # Use the generated formula
           form = formula,
           data = xtrain,      # Training data
@@ -540,13 +575,13 @@ for(station in stations_list){
     R2 <- hydroGOF::R2(out$pred, out$obs)
     mNSE <- hydroGOF::mNSE(out$pred, out$obs, j=1)
     kge <- hydroGOF::KGE(out$pred, out$obs, j=1)
-    RMSE <- hydroGOF::rmse(out$pred, out$obs)
+    MAE <- hydroGOF::mae(out$pred, out$obs)
     
     lambda_opt <- m$bestTune$lambda
     
     GOF <- data.frame(alpha=1, 
                       lambda=lambda,   
-                      RMSE=RMSE, 
+                      MAE=MAE, 
                       R2=R2,
                       mNSE=mNSE,
                       KGE=kge,
@@ -571,7 +606,7 @@ for(station in stations_list){
                 coef_sds = coef_sds,
                 params = list(lags = lags,rolling_window = rolling_window,stepsize = stepsize,
                               temp_res = temp_res,transformation = transform,objc_fnct = obj_fnct, 
-                              lambda_opt = lambda_opt, SE.factor = SE.factor, num_CV_folds = k),
+                              lambda_opt = lambda_opt, lambda_sel = lambda, SE.factor = SE.factor, num_CV_folds = k),
                 global_optimization_results = global_optimization_results))
     
   }
@@ -581,6 +616,7 @@ for(station in stations_list){
 
   fc_horizons <- c(1:12)
   
+  test_years_loop <- 2014:2021
   
   for (h in fc_horizons) {
     
@@ -596,11 +632,12 @@ for(station in stations_list){
         diff_lag = T,
         temp_res = "week",
         stepsize = 50,
-        obj_fnct = "RMSE",
+        obj_fnct = "MAE",
         transform = "sqrt",
         seasonality = F,
-        lambda_opt = "lambda.1se", #"lambda.1se" oder "lambda.min",
-        SE.factor = 1,
+        test_years = test_years_loop,
+        lambda_opt = "lambda.min", #"lambda.1se" oder "lambda.min",
+        SE.factor = 0.5,
         interaction = "automatic"
       )
     
@@ -639,12 +676,12 @@ for(station in stations_list){
   }
   
 }  
-  save(final_model_list, file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_final_model_list.RData"))
-  save(n_coefs_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"n_coefs_list.RData"))
-  save(coefs_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_coefs_list.RData"))
-  save(forecasts_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_forecasts_list.RData"))
-  save(GOF_list,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"_GOF_list.RData"))
-  save(results,file = paste0("results/",today,"/",model_name,"/",model_name,"_",dataset,"results.RData"))
+  save(final_model_list, file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"_final_model_list",test_years_loop,".RData"))
+  save(n_coefs_list,file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"n_coefs_list",test_years_loop,".RData"))
+  save(coefs_list,file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"_coefs_list",test_years_loop,".RData"))
+  save(forecasts_list,file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"_forecasts_list",test_years_loop,".RData"))
+  save(GOF_list,file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"_GOF_list",test_years_loop,".RData"))
+  save(results,file = paste0("results/",today,"/",model_name,"/",test_years_loop,"/",model_name,"_",dataset,"_results",test_years_loop,".RData"))
 
 
 
@@ -658,12 +695,13 @@ rolling_window = F #T für meine, F für Johannes version
 diff_lag = FALSE
 temp_res = "week"
 stepsize = 50
-obj_fnct = "RMSE"
+obj_fnct = "MAE"
 transform = "sqrt"
 seasonality = T
 filter_year <- 2014
 lambda_opt = "lambda.1se" #"lambda.1se" oder "lambda.min"
 SE.factor = 1
+seasonality = F
 
 
 

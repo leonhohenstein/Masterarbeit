@@ -98,14 +98,21 @@ spartacus_SR <- spartacus_SR %>% rename(date = time) %>%
 
 df <- spartacus_SR %>% select("date","value","param","station") %>% 
   rbind(df,.)
+df <- df %>% filter(station != "Tauchenbach")
 
-df <- df %>%
-  mutate(station = recode(station,
-                              "Tauchenbach" = "tauchenbach",
-                              "Kienstock" = "kienstock",
-                              "Flattach" = "flattach",
-                              "Uttendorf" = "uttendorf",
-                          "Kienstock_Catchment" = "catchment_kienstock"))
+file <- "data/tauchenbach/Predictors_Tauchenbach.csv"
+raw_data <- read.csv2(file,sep = ",", header=T, skip=0, na.strings = ("NA")) #na.strings = ("L\374cke") if there is Lücke instead of NA
+# raw_data[, 1] <- gsub("T|\\+00:00", " ", raw_data[,1])
+raw_data$date <- as.Date(raw_data$date) 
+raw_data <- raw_data %>% rename(RR = rr, TN = tn, TX = tx, sa = SA, )
+
+# df <- df %>%
+#   mutate(station = recode(station,
+#                               "Tauchenbach" = "tauchenbach",
+#                               "Kienstock" = "kienstock",
+#                               "Flattach" = "flattach",
+#                               "Uttendorf" = "uttendorf",
+#                           "Kienstock_Catchment" = "catchment_kienstock"))
 # df <- df %>% setDT() %>% .[, year := lubridate::year(date)]
 # ann_prec <- df[param == "RR", .(ann_prec = sum(value)), by = .(year, station)]
 # ann_prec <- ann_prec[, .(ann_prec = mean(ann_prec)), by = (station)]
@@ -115,7 +122,7 @@ df <- df %>%
 
 
 for (s in c("tauchenbach","kienstock","flattach","uttendorf","catchment_kienstock")) {
-  s <- "tauchenbach"
+  # s <- "tauchenbach"
   df_temp <- df %>% filter(station == s)
   df_temp <- df_temp %>% pivot_wider(names_from = "param",values_from = "value")  
   
@@ -170,21 +177,25 @@ raw_data$date <- make_date(year = raw_data$year, month = raw_data$month, day = r
 
 oscillation <- raw_data %>%  select(c("date","pna_index_cdas")) %>% left_join(oscillation, ., by = "date")
 
-oscillation <- enso %>% rename(date = Date) %>% select(c("ONI","SOI","NPGO","date",)) %>% 
+
+raw_data <- read.csv2(file = "data/climate/norm.daily.nao.cdas.z500.19500101_current.csv", 
+                      header=T, 
+                      skip=0,dec = ".", 
+                      na.strings = c("Lücke", "NA"), 
+                      sep = ",",
+                      stringsAsFactors = F)
+
+raw_data$date <- make_date(year = raw_data$year, month = raw_data$month, day = raw_data$day)
+
+oscillation <- raw_data %>%  select(c("date","nao_index_cdas")) %>% left_join(oscillation, ., by = "date")
+
+
+oscillation <- enso %>% rename(date = Date) %>% select(c("ONI","SOI","date",)) %>% 
   left_join(oscillation, ., by = "date")
 
 oscillation$ONI <- zoo::na.spline(oscillation$ONI)
-oscillation$NPGO <- zoo::na.spline(oscillation$NPGO)
 oscillation$SOI <- zoo::na.spline(oscillation$SOI)
-# 
-# oscillation %>%
-#   filter( year == 2015) %>%
-#   ggplot()+
-#   geom_line(aes(x=date, y = ONI), color = "green")+
-#   geom_line(aes(x=date, y = NPGO), color = "blue")+
-#   geom_line(aes(x=date, y = SOI), color = "red")+
-#   lims(y = c(-10,10))
-  
+
 data_daily <- oscillation %>%  rename(Date = date) %>% 
   left_join(data_daily, ., by = "Date")
 
@@ -198,16 +209,16 @@ data_Monthly <- data_daily %>%
                    precipitation_sum = sum(precipitation),
                    
                    sunshine_mean = mean(sunshine),
-                   ao_last = last(ao_index_cdas),
-                   ao_mean = mean(ao_index_cdas),
-                   pna_last = last(pna_index_cdas),
-                   pna_mean = mean(pna_index_cdas),
+                   AO_last = last(ao_index_cdas),
+                   AO_mean = mean(ao_index_cdas),
+                   PNA_last = last(pna_index_cdas),
+                   PNA_mean = mean(pna_index_cdas),
                    ONI_last = last(ONI),
                    ONI_mean = mean(ONI),
                    SOI_last = last(SOI),
                    SOI_mean = mean(SOI),
-                   NPGO_last = last(NPGO),
-                   NPGO_mean = mean(NPGO)
+                   NAO_last = last(nao_index_cdas),
+                   NAO_mean = mean(nao_index_cdas)
                    ) %>% 
   as.data.frame()
 
@@ -285,16 +296,16 @@ Meteo_Weekly <- data_daily %>% setDT() %>%
     year = last(Year),
     month = last(Month),
     week_year = last(week_year),
-    ao_last = last(ao_index_cdas),
-    ao_mean = mean(ao_index_cdas, na.rm = T),
-    pna_last = last(pna_index_cdas),
-    pna_mean = mean(pna_index_cdas, na.rm = T),
+    AO_last = last(ao_index_cdas),
+    AO_mean = mean(ao_index_cdas, na.rm = T),
+    PNA_last = last(pna_index_cdas),
+    PNA_mean = mean(pna_index_cdas, na.rm = T),
     ONI_last = last(ONI),
     ONI_mean = mean(ONI, na.rm = T),
     SOI_last = last(SOI),
     SOI_mean = mean(SOI, na.rm = T),
-    NPGO_last = last(NPGO),
-    NPGO_mean = mean(NPGO), na.rm = T)
+    NAO_last = last(nao_index_cdas),
+    NAO_mean = mean(nao_index_cdas), na.rm = T)
     , by = week_tot]
 
 # Meteo_Weekly[which(Meteo_Weekly, is.na = T),]

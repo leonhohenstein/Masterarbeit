@@ -7,14 +7,13 @@ rm(list=ls())
 # catchment <- "TB" #TB = Tauchenbach
 
 stations_list <- c(
-  "tauchenbach",
-                   "flattach",
-                   "kienstock",
-                   "uttendorf",
-  "catchment_kienstock")
+  "Tauchenbach",
+                   "Flattach",
+                   "Kienstock",
+                   "Uttendorf")
 for (station in stations_list) {
   
-  station <- "kienstock"
+  # station <- "Kienstock"
   
 
 
@@ -74,7 +73,6 @@ for (n in 1:length(acc_per_names)) {
 WB_table_long <- do.call(rbind, WB_list)
 WB_table_wide <- do.call(cbind, WB_list)
 
-
 ########## Arrange the final Data set by removing surplus date columns and adding other variable columns ###
 dates <- WB_table_wide$WB_1week.Date
 df <- WB_table_wide %>% #removing surplus date columns 
@@ -84,20 +82,6 @@ df <- df %>% #removing surplus columns that define the aggregation period
   select(-contains("Acc_Per"))
 
 data <- rename(data,Date = date)
-
-# df$Date <- data$date
-
-# final_df$T_min_mean_weekly <- data$Tmin_mean
-# final_df$T_max_mean_weekly <- data$Tmax_mean
-# final_df$snowcover_sum_weekly <- data$snowcover_sum
-# final_df$precipitation_sum_weekly <- data$precipitation_sum
-# final_df$sunshine_mean_weekly <- data$sunshine_mean
-# final_df$ETP_sum_weekly <- data$ETP
-# final_df$Flow_min_weekly <- data$Flow_min
-# final_df$BF_min_weekly <- data$baseflow_min
-# final_df$BF_max_weekly <- data$baseflow_max
-# final_df$BF_mean_weekly <- data$baseflow_mean
-
 
 df <- df %>% 
   select(-contains(".WB_rel")) %>%  # Remove columns containing ".rel"
@@ -115,7 +99,7 @@ save(df,file = paste0("data/",station,"/Final_df_",station,"_weekly.RData"))
 #### for calculating CWB of the Kienstock Catchment Only ----#### 
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### 
 
-  load(file = paste0("data/","kienstock","/Meteo_Variables_Weekly_","catchment_kienstock",".RData")) %>% 
+  load(file = paste0("data/","kienstock","/Meteo_Variables_Weekly_","Kienstock_Catchment",".RData")) %>% 
     as_tibble()
 data <- Meteo_Weekly
  
@@ -178,7 +162,7 @@ data <- Meteo_Weekly
   
   df <- merge(df,data,by="Date")
   
-  save(df,file = paste0("data/","kienstock/Final_df_","catchment_kienstock","_weekly.RData"))
+  save(df,file = paste0("data/","Kienstock/Final_df_","Kienstock_Catchment","_weekly.RData"))
   
 
 
