@@ -458,7 +458,7 @@ for (fc_years in fc_years_list) {
 forecast_df_all <- temp
 cum_seg_all <- left_join(cum_seg_all , quantiles_all, by = c("exceed_prob","station","fc_period"))
 
-save(quantiles_all, file = (paste0("results/",today,"/",model_name,"/quantiles_all.RData")))
+# save(quantiles_all, file = (paste0("results/",today,"/",model_name,"/quantiles_all.RData")))
 
 
 # START LOOP FOR PLOTTING ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -488,7 +488,6 @@ for (fc_years in fc_years_list) {
     plot <- top_coefs_real %>%
       filter(fc_period == fc_years_text) %>% 
       filter(coefs > 0) %>% 
-      # mutate(variable = factor(variable, levels = top_coefs)) %>% 
       ggplot(aes(x = coefs, y = reorder(variable, coefs_rel), fill = n_horizon)) +
       geom_col(color = "black", width = 0.9) +
       # geom_errorbarh(aes(xmin = coefs_lb, xmax = coefs_ub), height = 0.3) +
@@ -510,7 +509,6 @@ for (fc_years in fc_years_list) {
         legend.position = "bottom"
       )
     
-    # scale_x_discrete(breaks = n_horizon)
     print(plot)
     dev.off()
     
@@ -518,15 +516,10 @@ for (fc_years in fc_years_list) {
       
     
     ## Plotting Coefficients ----
-    
-    
+
     coefs_df <- coefs_df_all %>% filter(station ==s & fc_period == fc_years_text)
     
-    # coefs_df <- coefs_df_all %>% filter(station ==s & fc_period == fc_years_text)
-    # coefs_df <- coefs_df %>% setDT() %>% 
-    #   .[variable != "(Intercept)", c(.SD,.(coefs_rel = (abs(coefs)*100)/(sum(abs(coefs))) ) ), by = fc_horizon]
-    
-    top_coefs_all <- coefs_df_all %>% setDT() %>% 
+   top_coefs_all <- coefs_df_all %>% setDT() %>% 
       .[variable != "(Intercept)", .(coefs = sum(abs(coefs))), by = .(fc_period,variable,station)]
     
     top_coefs <- top_coefs_all %>% filter(station ==s & fc_period == fc_years_text) %>%  arrange(desc(coefs))
@@ -873,7 +866,47 @@ for (fc_years in fc_years_list) {
   print(plot)
   dev.off()
   
-  #### Quantile based evluation ----
+  #### Overall GOF measures ----
+  
+  png(file=paste0("results/",today,"/",model_name,"/GOF/",fc_years_text,"/",model_name,"overall_GOF_MARE",s,"_",fc_years_text,".png"),
+      width = 1000, height = 600, units = "px")
+
+  plot <- fc_df_quant_GOF %>% filter(station == s & fc_period == fc_years_text & exceed_prob == 1) %>% 
+    ggplot()+
+    geom_line(aes(x=horizon, y = MARE, color = fc_method),linewidth = 1)+
+    theme_bw()+
+    labs(x= "Lead Time [weeks]", y = "MARE", title = paste0("Mean Absolute Relative Error vs. Lead Time | Station ",s))
+  print(plot)
+  dev.off()  
+  
+  png(file=paste0("results/",today,"/",model_name,"/GOF/",fc_years_text,"/",model_name,"overall_GOF_RMSE",s,"_",fc_years_text,".png"),
+      width = 1000, height = 600, units = "px")
+  
+  plot <- fc_df_quant_GOF %>% filter(station == s & fc_period == fc_years_text & exceed_prob == 1) %>% 
+    ggplot()+
+    geom_line(aes(x=horizon, y = RMSE, color = fc_method),linewidth = 1)+
+    theme_bw()+
+    labs(x= "Lead Time [weeks]", y = "RMSE", title = paste0("RMSE vs. Lead Time | Station ",s))+
+    scale_x_continuous(breaks = seq(1,12,1))
+  
+  print(plot)
+  dev.off() 
+  
+  png(file=paste0("results/",today,"/",model_name,"/GOF/",fc_years_text,"/",model_name,"MARE_stations_comparison",s,"_",fc_years_text,".png"),
+      width = 1000, height = 600, units = "px")
+  
+  plot <- fc_df_quant_GOF %>% filter(fc_period == fc_years_text & exceed_prob == 1 & 
+                                       fc_method == "ensemble_median") %>% 
+    ggplot()+
+    geom_line(aes(x=horizon, y = MARE, color = station),linewidth = 1)+
+    theme_bw()+
+    labs(x= "Lead Time [weeks]", y = "MARE", title = paste0("MARE vs. Lead Time | Station ",s))+
+    scale_x_continuous(breaks = seq(1,12,1))
+  print(plot)
+  dev.off() 
+  
+  
+  #### Quantile based residuals ----
   
   if (file.exists(paste0("results/",today,"/",model_name,"/GOF/"))){
   } else {
@@ -893,15 +926,6 @@ for (fc_years in fc_years_list) {
   } else {
     dir.create(file.path(paste0("results/",today,"/",model_name,"/hydrographs/",fc_years_text)))
   }
-  
-  cum_seg_all %>% 
-    filter(horizon==5 & fc_period == fc_years_text) %>% 
-    ggplot() +
-    # geom_line(aes(x = exceed_prob, y = mean_pred, color = "Predicted Mean"))+
-    # geom_line(aes(x = exceed_prob, y = mean_obs, color = "Observed Mean", linetype="dotted"))+
-    # geom_line(aes(x = exceed_prob, y = RMSE, color = "RMSE"))+
-    geom_line(aes(x = exceed_prob, y = r2, color = "r2"))+
-    geom_line(aes(x = exceed_prob, y = r2_2, color = "r2_2"))
   
   quantile_y_intercept <- quantiles_all %>% 
     filter(exceed_prob %in% seq(10,100,10) & station == s & fc_period ==fc_years_text) %>% 
@@ -1152,6 +1176,20 @@ for (fc_years in fc_years_list) {
   dev.off()
   }
     }
+  
+    
+    png(file=paste0("results/",today,"/",model_name,"/GOF/",fc_years_text,"/",model_name,"MARE_stations_comparison_",fc_years_text,".png"),
+        width = 1000, height = 600, units = "px")
+    
+    plot <- fc_df_quant_GOF %>% filter(fc_period == fc_years_text & exceed_prob == 1) %>% 
+      ggplot()+
+      geom_line(aes(x=horizon, y = RMSE, color = fc_method),linewidth = 1)+
+      theme_bw()+
+      facet_wrap(~station, scales = "free")+
+      labs(x= "Lead Time [weeks]", y = "RMSE", title = paste0("RMSE vs. Lead Time | Station ",s))+
+      scale_x_continuous(breaks = seq(1,12,1))
+    print(plot)
+    dev.off()   
 }
 # 
 # png(file=paste0("results/",today,"/",model_name,"/GOF/",model_name,"_residuals_naive_models.png"),

@@ -14,6 +14,7 @@ library(purrr)
 library(patchwork)
 library(lfstat)
 library(ggnewscale)
+library(scales)  
 rm(list=ls())
 
 # today <- Sys.Date()-5
@@ -44,12 +45,18 @@ for(s in unique(hist_fc_df_all$station)){
   prec_seas <- df %>% setDT() %>% 
     .[, .(prec_monthly = sum(precipitation),
           swe_melted_monthly = sum(swe_melted),
-          swe_added_monthly = sum(swe_added)), by = .(month,year) ]
+          swe_added_monthly = sum(swe_added),
+          rET_monthly = sum(rET),
+          flow_mean = mean(flow_mean)), by = .(month,year) ]
   
   prec_seas <- prec_seas[, .(prec_monthly = mean(prec_monthly),
                              swe_melted_monthly = mean(swe_melted_monthly),
-                             swe_added_monthly = mean(swe_added_monthly)), by = month]
+                             swe_added_monthly = mean(swe_added_monthly),
+                             rET_monthly = mean(rET_monthly),
+                             flow_mean = mean(flow_mean)), by = month]
+  
   flow_obs <- df %>% select(flow_mean,Date) %>% rename(date = Date) %>% mutate(station = s)
+  
   df <- df %>% rename("date" = "Date") %>% 
     select(date,precipitation,swe_added, swe_melted) %>% mutate(station = paste0(s))
   lf_seas$station <- s
@@ -63,10 +70,123 @@ for(s in unique(hist_fc_df_all$station)){
   
 }
 
-
+# Seasonality in Climate Variables Plot (Flow vs. Snow, ETP, Prec)----
+# 
+# prec_seas_all <- prec_seas_all %>% group_by(station) %>% na.omit() %>% 
+#   mutate(MQ = mean(flow_mean), 
+#          Q_max = max(flow_mean), 
+#          P_max = max(prec_monthly))
+# 
+# prec_seas_all$P_max <- ceiling(prec_seas_all$P_max / 50) * 50
+# prec_seas_all$x_min <- prec_seas_all$month-0.45
+# prec_seas_all$x_max <- prec_seas_all$month+0.45
+# P_max_all <- max(prec_seas_all$P_max)
+# Q_max_all <- max(prec_seas_all$Q_max)
+# scale_factor_all <- P_max_all/Q_max_all
+# 
+# prec_seas_all <- prec_seas_all %>% mutate(scaling_factor = Q_max / P_max)
+# prec_seas_all <- prec_seas_all %>% mutate(y_max = P_max_all,
+#                                           y_min = (P_max_all - prec_monthly),
+#                                           flow_scaled = flow_mean / scaling_factor)
 
 # 
-# snow <- prec_seas_all %>% 
+# prec_seas_all %>% 
+#   ggplot() +
+#   geom_rect(aes(xmin = x_min, xmax = x_max, 
+#                                   ymin = y_min, ymax = y_max, fill = "Precipitation"), 
+#             alpha = 0.6, inherit.aes = FALSE, color = "black")+
+#   geom_line(aes(x =month,y = (flow_mean),color = "Flow [m^3]"), linewidth = 1)+
+#   geom_line(aes(x= month, y = rET_monthly, color = "reference Evapotranspiration [mm?]"), linewidth = 1)+
+#   geom_line(aes(x= month, y = (swe_added_monthly+swe_melted_monthly), color = "Snow Balance [mm?]"), linewidth = 1)+
+#   scale_fill_manual(
+#     values = c("Precipitation" = "steelblue"),
+#     name = "Legend")+
+#   scale_color_manual(
+#     values = c("Flow [m^3]" = "black",
+#                "reference Evapotranspiration [mm?]" = "red2",
+#                "Snow Balance [mm?]" = "forestgreen"),
+#     name = "Legend")  +
+#   scale_y_continuous(
+#     name = "Discharge [m³/s]",
+#     sec.axis = sec_axis(
+#       ~ . * scale_factor_all,  # convert back to mm
+#       name = "Precipitation [mm/month]",
+#       breaks = seq(0, P_max_all, by = 50)
+#     )
+#   )+
+#   # scale_y_continuous(
+#   #   name = "Discharge [m³/s]",
+#   #   sec.axis = sec_axis(
+#   #     ~ (Q_max_all - .) / scale_factor_all,  # reverse transformation
+#   #     # ~ P_max - ((. - (0.5*Q_max_all)) / scale_factor_all),
+#   #     name = "Precipitation [mm/month]",
+#   #     breaks = seq(0, P_max_all, by = 50) ))+
+#   scale_x_continuous(breaks = seq(1,12,1))+
+#   
+#   facet_wrap(~station, scales = "free_y")+
+#   theme_bw()
+#   
+
+# 
+# 
+# 
+# prec_seas_all <- prec_seas_all %>%
+#   group_by(station) %>%
+#   mutate(
+#     Q_max = max(flow_mean, na.rm = TRUE),
+#     P_max = max(prec_monthly, na.rm = TRUE),
+#     scaling_factor = Q_max / P_max,   # per station scaling factor
+#     flow_scaled = flow_mean / scaling_factor
+#   ) %>%
+#   ungroup()
+# 
+# P_max_all <- max(prec_seas_all$P_max, na.rm = TRUE)
+# Q_max_all <- max(prec_seas_all$Q_max, na.rm = TRUE)
+# scale_factor_all <- P_max_all / Q_max_all
+# 
+# prec_seas_all %>% 
+#   ggplot() +
+#   geom_rect(aes(xmin = month - 0.45, xmax = month + 0.45,
+#                 ymin = 0, ymax = prec_monthly,
+#                 fill = "Precipitation"), alpha = 0.6, color = "black") +
+#   geom_line(aes(x = month, y = flow_scaled, color = "Flow [m³/s]"), linewidth = 1) +
+#   geom_line(aes(x = month, y = rET_monthly, color = "reference Evapotranspiration [mm]"), linewidth = 1) +
+#   geom_line(aes(x = month, y = swe_added_monthly + swe_melted_monthly, color = "Snow Balance [mm]"), linewidth = 1) +
+#   geom_line(aes(x = month, y = swe_added_monthly, color = "Snow Added [mm]"), linewidth = 1) +
+#   geom_line(aes(x = month, y = swe_melted_monthly, color = "Snow Melt [mm]"), linewidth = 1) +
+#   
+#   scale_fill_manual(values = c("Precipitation" = "steelblue"), name = "Legend") +
+#   scale_color_manual(values = c("Flow [m³/s]" = "black",
+#                                 "reference Evapotranspiration [mm]" = "red2",
+#                                 "Snow Balance [mm]" = "forestgreen",
+#                                 "Snow Added [mm]" = "grey",
+#                                 "Snow Melt [mm]" = "orange"),
+# 
+#                      name = "Legend") +
+#   scale_y_continuous(
+#     name = "Discharge [m³/s]",
+#     sec.axis = sec_axis(~ . * scale_factor_all,
+#                         name = "Precipitation [mm/month]",
+#                         breaks = seq(0, P_max_all, by = 50))
+#   ) +
+#   scale_x_continuous(breaks = 1:12) +
+#   facet_wrap(~station, scales = "free_y") +
+#   theme_bw()
+# 
+# prec_seas_all %>% 
+#   ggplot()+
+#   geom_line(aes(x=month, y = prec_monthly,color = station))
+# 
+# prec_seas_all %>% 
+#   ggplot()+
+#   geom_line(aes(x=month, y = swe_added_monthly + swe_melted_monthly,color = station), linewidth = 1)+
+#   theme_bw()+
+#   scale_x_continuous(breaks = seq(1,12,1))
+
+# Timing of Droughts vs. Snow etc. ----
+
+# 
+# snow <- prec_seas_all %>%
 #   ggplot()+
 #   geom_point(aes(y = (swe_added_monthly+swe_melted_monthly), x = month,  color = station))+
 #   geom_smooth(aes(y = (swe_added_monthly+swe_melted_monthly), x = month,color = station), se = F,method = "loess",span = 0.3)+
@@ -75,7 +195,7 @@ for(s in unique(hist_fc_df_all$station)){
 #   facet_wrap(~station,nrow = 1)+
 #   scale_x_continuous(breaks = seq(1,12,1))
 # 
-# rain<- prec_seas_all %>% 
+# rain<- prec_seas_all %>%
 #   ggplot()+
 #   geom_col(aes(y = prec_monthly, x = month), fill = "steelblue",color = "black")+
 #   
@@ -85,7 +205,7 @@ for(s in unique(hist_fc_df_all$station)){
 #   scale_x_continuous(breaks = seq(1,12,1))
 # 
 # 
-# droughts <- lf_seas_all %>% 
+# droughts <- lf_seas_all %>%
 #   ggplot() +
 #   geom_col(aes(y = n_drought_weeks, x = month), fill = "orange",color = "black")+
 #   facet_wrap(~station,nrow = 1)+
@@ -93,7 +213,7 @@ for(s in unique(hist_fc_df_all$station)){
 #   theme_bw()+
 #   scale_x_continuous(breaks = seq(1,12,1))
 # 
-# (snow + 
+# (snow +
 #     theme(axis.title.x = element_blank(),
 #           axis.text.x  = element_blank(),
 #           axis.ticks.x = element_blank(),
@@ -112,7 +232,6 @@ for(s in unique(hist_fc_df_all$station)){
 #   (droughts +
 #      theme(plot.margin = margin(0,5,0,5),
 #            legend.text=element_text(size=6)))
-# 
 
 # Calculate Drought Objects ----
 
@@ -193,6 +312,247 @@ calculate_drought_objects <-
     
     return(results)
   }
+
+#Calculate Drought Events for the entire Test Period (2015_2021) (Einordnung) ----
+
+grey_events <-flow_obs_all %>% rename(flow = flow_mean) %>% 
+  filter(lubridate::year(date) %in% 1980:2021) %>% 
+  mutate(fc_period = "2015_2021", fc_method = "observed_flow", horizon = 0, pred_obs = "obs") %>% 
+  .[, calculate_drought_objects(.SD,
+                                             quantiles_all,
+                                             ratio_pooling = 0.1,
+                                             tmin_pooling = 14),
+                 by = .(station),
+                 .SDcols = c("date", "flow", "station", "fc_period","fc_method","horizon","pred_obs")]
+
+grey_events <- grey_events %>% select(c("date",  "discharge" ,       
+                                     "threshold",    "def.increase", 
+                                     "event.no", "event.orig","station")) 
+
+grey_events <- grey_events[event.no != 0, .(duration = .N,
+                                            def.vol = sum(def.increase),
+                                            qmin = min(discharge),
+                                            start_month = lubridate::month(first(date)),
+                                            start_date = first(date)), by = .(event.no,station)]
+grey_events <- grey_events %>% mutate(severity = (def.vol/duration))
+grey_events$seasonality <- 0.5*sin( ((grey_events$start_month-4)*pi/6)) +0.5
+
+# Plot for Grey Fingerprints ----
+  # ### map the empty plot
+  # circle_coords <- function(r, n_axis = ncol(data) - 1){
+  #   fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
+  #   x <- r*cos(fi)
+  #   y <- r*sin(fi)
+  #   
+  #   tibble(x, y, r)
+  # }
+  # 
+  # central_distance <- 0.2
+  # 
+  # map <- map_df(seq(0, 1, 0.25) + central_distance, circle_coords) %>%
+  #   ggplot(aes(x, y)) +
+  #   geom_polygon(data = circle_coords(1 + central_distance), 
+  #                alpha = alpha_map, fill = "gray97") +
+  #   geom_path(aes(group = r), lty = linetype_grid, alpha = 0.1) +
+  #   theme_void()
+  # 
+  # # calculate coordinates for the axis
+  # axis_coords <- function(n_axis){
+  #   fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2
+  #   x1 <- central_distance*cos(fi)
+  #   y1 <- central_distance*sin(fi)
+  #   x2 <- (1 + central_distance)*cos(fi)
+  #   y2 <- (1 + central_distance)*sin(fi)
+  #   
+  #   tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
+  # }
+  # 
+  # axis <- geom_line(data = axis_coords(ncol(data) - 1), 
+  #                   aes(x, y, group = id), alpha = 0.3)
+  # map + axis
+  # 
+  # # plot the data 
+  # axis_name_offset <- 0.2
+  # rescaled_coords <- function(r, n_axis){
+  #   # fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
+  #   fi <- seq(0, 2 * pi, length.out = n_axis + 1) + pi/2#
+  #   
+  #   tibble(r, fi) %>% mutate(x = r*cos(fi), y = r*sin(fi)) %>% select(-fi)
+  # }
+  # 
+  # text_data <- data %>%
+  #   select(-start_date) %>%
+  #   map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
+  #   mutate(r = seq(0, 1, 0.25)) %>%
+  #   pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
+  #   mutate(value = round(value, digits = 2))
+  # 
+  # text_coords <- function(r, n_axis = ncol(data) - 1){
+  #   fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
+  #   x <- r*cos(fi)
+  #   y <- r*sin(fi)
+  #   
+  #   tibble(x, y, r = r - central_distance)
+  # }
+  # 
+  # labels_data <- map_df(seq(0, 1, 0.25) + central_distance, text_coords) %>%
+  #   bind_cols(text_data %>% select(-r))
+  # 
+  # map + axis + 
+  #   geom_text(data = labels_data, aes(x, y, label = value), alpha = 0.65) +
+  #   geom_text(data = text_coords(1 + central_distance + 0.2), 
+  #             aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)])
+  # 
+  # rescaled_data <- data %>% 
+  #   # mutate(across(-c(station,horizon,fc_method), rescale)) %>%
+  #   mutate(copy = pull(., 1)) %>%
+  #   pivot_longer(-c(start_date), names_to = "parameter", values_to = "value") %>%
+  #   group_by(start_date) %>%
+  #   mutate(coords = rescaled_coords(value + central_distance, ncol(data) - 1)) %>%
+  #   unnest(cols = c(coords)) 
+  # 
+  # drawings <- map+axis + 
+  #   geom_point(data = rescaled_data, 
+  #              aes(x, y, group = start_date), col = "grey", 
+  #              size = 3) +
+  #   geom_path(data = rescaled_data, 
+  #             aes(x, y, group = start_date, col = "grey", 
+  #             size = 1)+
+  #   geom_polygon(data = rescaled_data, 
+  #                aes(x, y, group = start_date),
+  #                    col = "grey", fill = "grey"), 
+  #                size = 1, alpha = 0.1, show.legend = FALSE) +
+  #   geom_text(data = labels_data,
+  #             aes(x, y, label = value), alpha = 0.65) +
+  #   geom_text(data = text_coords(1 + central_distance + axis_name_offset),
+  #             aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)]) +
+  #   labs(col = "steelblue") +
+  #   theme_void()
+  # 
+
+
+
+
+
+
+  
+  
+axis_name_offset <-  0.2
+central_distance = 0.05
+fill_alpha = 0.1
+linetype_grid = 1
+alpha_map = 0.01
+
+drawings_all <- NULL
+  
+  for (s in unique(grey_events$station)) {
+    
+  data <- grey_events
+  # data <- data %>% filter(station == "Tauchenbach")
+  data <- data %>% filter(station == s & duration > 30)
+  data <- data %>% select(qmin, def.vol, duration, severity, start_month, start_date)
+  data <- data %>% select(qmin, def.vol, duration, severity, start_date)
+  
+  params <- setdiff(names(data), c("start_date"))
+  k <- length(params)
+  
+  data_scaled <- data %>%
+    mutate(across(all_of(params), ~ scales::rescale(., to = c(0,1))))
+  
+   # angle lookup per parameter (fixed order)
+  angles <- tibble(
+    parameter = params,
+    fi = seq(0, 2*pi, length.out = k + 1)[1:k] + pi/2
+  )
+  
+  # long + coordinates
+  plot_df <- data_scaled %>%
+    pivot_longer(all_of(params), names_to = "parameter", values_to = "value") %>%
+    left_join(angles, by = "parameter") %>%
+    mutate(r = central_distance + value,
+           x = r * cos(fi),
+           y = r * sin(fi)) %>%
+    arrange(start_date, fi) %>%
+    group_by(start_date) %>%
+    group_modify(~ bind_rows(.x, .x[1,])) %>%
+    ungroup()
+  
+  text_data <- data %>%
+    select(-start_date) %>%
+    map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
+    mutate(r = seq(0, 1, 0.25)) %>%
+    pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
+    mutate(value = round(value, digits = 2))
+  
+  text_coords <- function(r, n_axis = ncol(data) - 1){
+    fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
+    x <- r*cos(fi)
+    y <- r*sin(fi)
+    
+    tibble(x, y, r = r - central_distance)
+  }
+  
+  labels_data <- map_df(seq(0, 1, 0.25) + central_distance, text_coords) %>%
+    bind_cols(text_data %>% select(-r))
+  
+  
+  circle_coords <- function(r, n_axis = ncol(data) - 1){
+    fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
+    x <- r*cos(fi)
+    y <- r*sin(fi)
+    
+    tibble(x, y, r)
+  }
+  
+  
+  map <- map_df(seq(0, 1, 0.25) + central_distance, circle_coords) %>%
+    ggplot(aes(x, y)) +
+    geom_polygon(data = circle_coords(1 + central_distance), 
+                 alpha = alpha_map, fill = "gray97") +
+    geom_path(aes(group = r), lty = linetype_grid, alpha = 0.1) +
+    theme_void()
+  
+  # calculate coordinates for the axis
+  axis_coords <- function(n_axis){
+    fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2
+    x1 <- central_distance*cos(fi)
+    y1 <- central_distance*sin(fi)
+    x2 <- (1 + central_distance)*cos(fi)
+    y2 <- (1 + central_distance)*sin(fi)
+    
+    tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
+  }
+  
+  axis <- geom_line(data = axis_coords(ncol(data) - 1), 
+                    aes(x, y, group = id), alpha = 0.3)
+  map + axis
+  
+  drawings <- map + axis + 
+    geom_point(data = plot_df, aes(x, y, group = start_date),
+               color = "grey50", size = 1.8, show.legend = FALSE) +
+    # geom_path(data = plot_df, aes(x, y, group = start_date),
+    #           color = "grey50", linewidth = 0.6, show.legend = FALSE) +
+    geom_polygon(data = plot_df, aes(x, y, group = start_date),
+                 fill = "grey70", alpha = 0.05, color = NA, show.legend = FALSE)+
+    # geom_text(data = labels_data,
+    #           aes(x, y, label = value), alpha = 0.65) +
+    geom_text(data = text_coords(1 + central_distance + axis_name_offset),
+              aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)]) +
+    labs(subtitle = paste0("Station ",s, " | n = ",nrow(data)))
+  
+  drawings_all[[paste0(s)]] <- drawings
+  }
+  
+drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  
+
+# 
+# test <- data.frame(months = seq(1,12,1))
+# 
+# test$seasonality <- 0.5*sin( ((test$months-4)*pi/6)) +0.5
+# test %>% ggplot()+
+#   geom_line(aes(x=months,y = seasonality))+
+#   scale_x_continuous(breaks = seq(1,12,1))
 
 setDT(hist_fc_df_all)
 
@@ -535,12 +895,13 @@ if (file.exists(paste0("results/",today,"/",model_name,"/historic_events/"))){
 }
 
 
+
 fc_years_list <- list(c(2015:2016),c(2003:2004))
 
 for (s in unique(wide$station)) {
   for (fc_years in fc_years_list) {
     
-    # fc_years <- c(2015:2016)
+    fc_years <- c(2015:2016)
     
     fc_years_text <- paste0(min(fc_years),"_",max(fc_years))
     
@@ -568,8 +929,8 @@ for (s in unique(wide$station)) {
     data_prec$y_min <- (P_max - data_prec$precipitation_monthly_sum) *scale_factor 
     
       
-    data_prec$prec_dummy <- P_max
-    data_prec$prec_hanging <- P_max - data_prec$precipitation_monthly_sum
+    # data_prec$prec_dummy <- P_max
+    # data_prec$prec_hanging <- P_max - data_prec$precipitation_monthly_sum
 
     data_flow <- flow_obs_all %>% filter(station ==s & lubridate::year(date) %in% fc_years)
     Q80_y_intercept <- quantiles_all %>% filter(station == s &
@@ -612,6 +973,7 @@ for (s in unique(wide$station)) {
         width = 1200, height = 600, units = "px")
     print(p_obs)
     dev.off()
+    
     
     for (h in unique(plot_data_wide$horizon)) {
       
@@ -726,132 +1088,4 @@ for (s in unique(wide$station)) {
     }
   }
 }
-
-
-test <- wide %>% filter(fc_period %in% c("2015_2016") &
-                          station == "Flattach")
-
-fix_point_start <- data.frame(station = c("Tauchenbach","Kienstock","Uttendorf","Flattach",
-                                          "Tauchenbach","Kienstock","Uttendorf","Flattach"),
-                              fc_period = c(rep("2015_2016",times = 4),rep("2003_2004",times = 4)),
-                              date = NA)
-
-## Historic Drought Event Plots ----
-
-
-segments_data <- plot_data_test %>% select(date, start_pred, end_pred, fc_method)
-
-
-
-
-segments <- ggplot(segments_data, aes(x = start_pred, xend = end_pred, y = fc_method, yend = fc_method, color = fc_method)) +
-  geom_segment(linewidth = 5, lineend = "round") +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "none",
-    panel.grid = element_blank()
-  ) +
-  labs(x = "Date", y = NULL) +
-  scale_color_manual(values = c("no_seasonality" = "steelblue",
-                                # "naive_season" = "darkred",
-                                "observed_flow" = "black",
-                                "naive_lag" = "pink",
-                                "Climate_Upper_BM" = "forestgreen",
-                                "Ensemble_Model" = "grey"),
-                     name = "Forecasting Models")+
-  theme_bw()
-
-p_flow <- plot_data_test %>% 
-  ggplot()+
-  # geom_line(aes(x = date, y = discharge_obs))+
-  geom_line(aes(x = date, y = discharge_pred, color = fc_method))+
-  geom_hline(yintercept = Q80_y_intercept, linetype = "dotted")+
-  # geom_area(aes(x = date, y = discharge_pred, fill = discharge_pred < Q80_y_intercept))+
-  scale_color_manual(values = c("no_seasonality" = "steelblue",
-                                # "naive_season" = "darkred",
-                                "observed_flow" = "black",
-                                "naive_lag" = "pink",
-                                "Climate_Upper_BM" = "forestgreen",
-                                "Ensemble_Model" = "grey"),
-                     name = "Forecasting Models") +
-  theme_bw()
-
-
-p_def <- plot_data_test_test %>% 
-  filter(def.increase_pred > 0) %>% 
-  ggplot()+
-  geom_line(aes(x = date, y = def.increase_pred, color = fc_method))+
-  # lims(y = c(0,1000000))+
-  # geom_hline(yintercept = Q80_y_intercept, linetype = "dotted")+
-  scale_color_manual(values = c("no_seasonality" = "steelblue",
-                                # "naive_season" = "darkred",
-                                "observed_flow" = "black",
-                                "naive_lag" = "pink",
-                                "Climate_Upper_BM" = "forestgreen",
-                                "Ensemble_Model" = "grey"),
-                     name = "Forecasting Models") +
-  theme_bw()
-
-p_def <- plot_data_test_test %>% 
-  filter(def.increase_pred > 0) %>% 
-  ggplot()+
-  geom_line(aes(x = date, y = def.increase_pred, color = fc_method))+
-  # lims(y = c(0,1000000))+
-  # geom_hline(yintercept = Q80_y_intercept, linetype = "dotted")+
-  scale_color_manual(values = c("no_seasonality" = "steelblue",
-                                # "naive_season" = "darkred",
-                                "observed_flow" = "black",
-                                "naive_lag" = "pink",
-                                "Climate_Upper_BM" = "forestgreen",
-                                "Ensemble_Model" = "grey"),
-                     name = "Forecasting Models") +
-  theme_bw()
-
-p_cum_def <- plot_data_test_test %>% 
-  # filter(def.increase_pred > 0) %>% 
-  ggplot()+
-  geom_line(aes(x = date, y = def.vol_pred_cum , color = fc_method))+
-  # lims(y = c(0,1000000))+
-  # geom_hline(yintercept = Q80_y_intercept, linetype = "dotted")+
-  scale_color_manual(values = c("no_seasonality" = "steelblue",
-                                # "naive_season" = "darkred",
-                                "observed_flow" = "black",
-                                "naive_lag" = "pink",
-                                "Climate_Upper_BM" = "forestgreen",
-                                "Ensemble_Model" = "grey"),
-                     name = "Forecasting Models") +
-  theme_bw()
-
-(p_flow + theme(axis.title.x = element_blank(),
-                axis.text.x  = element_blank(),
-                axis.ticks.x=element_blank(),
-                plot.margin = margin(0,5,0,5))) /
-  (p_def + theme(plot.margin = margin(0,5,0,5))) +
-  plot_layout(guides = "collect") & 
-  theme(legend.position = "bottom")
-
-(p_flow + theme(axis.title.x = element_blank(),
-                axis.text.x  = element_blank(),
-                axis.ticks.x=element_blank(),
-                plot.margin = margin(0,5,0,5))) /
-  (segments + theme(plot.margin = margin(0,5,0,5))) +
-  plot_layout(guides = "collect") & 
-  theme(legend.position = "bottom")
-#### Plotting Flow + Segments (lengths of events) + Cumulative Deficit Volume ----
-(p_flow + 
-   theme(axis.title.x = element_blank(),
-         axis.text.x  = element_blank(),
-         axis.ticks.x = element_blank(),
-         plot.margin  = margin(0,5,0,5),
-         legend.position = "none")) /
-  
-  (segments +
-     theme(axis.title.x = element_blank(),
-           axis.text.x  = element_blank(),
-           axis.ticks.x = element_blank(),
-           plot.margin  = margin(0,5,0,5),
-           legend.position = "none")) /
-  
-  (p_cum_def +
-     theme(plot.margin = margin(0,5,0,5)))
 
