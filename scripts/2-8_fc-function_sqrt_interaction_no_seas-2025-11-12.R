@@ -2,7 +2,6 @@
 #removed seasonality variales (cos, sin, week, month)
 
 
-
 #### Test models on forecasting on Leons data
 
 library(tidyverse)
@@ -14,6 +13,10 @@ library(Metrics)
 library(caret)
 
 rm(list = ls())
+#add specific predictors used for interaction terms to reflect distinct drought generating processes
+interaction_terms <- c("Tmin","Tmax","prec","swe_tot","swe_add","swe_melt","swe_melt4",
+                       "swe_melt8", "swe_add4","swe_add8",
+                       "swe_add12","swe_melt12","snow_add12","snow_melt12")
 
 stations_list <- c(
   "Tauchenbach",
@@ -28,7 +31,7 @@ test_years_list <- list(2015:2016
 )
 # name model parameters to make storing the results distinguishable
 
-model_name <- c("no_seasonality")
+model_name <- c("sqrt_interaction_no_seas")
 
 today <- Sys.Date()
 # today <- as.Date("2025-09-29")
@@ -60,23 +63,28 @@ for(station in stations_list){
     
     
   
-  df <- df %>% rename(date = Date, cwb1 = WB_1week, cwb2 = WB_2week, cwb3 = WB_3week, 
-                    
-                    cwb6 = WB_6week, cwb12 = WB_12week, cwb24 = WB_24week, cwb52 = WB_52week, 
-                    
-                    Tmin = Tmin, Tmax = Tmax, prec = precipitation, sun = sunshine, rET = rET, snow_melt = snow_melted, snow_add = snow_added,
-                    
-                    swe_add4 = swe_added_agg_4, swe_melt4 = swe_melted_agg_4, swe_add8 = swe_added_agg_8, swe_melt8 = swe_melted_agg_8,
-                    
-                    snow_add4 = snow_added_agg_4, snow_melt4 = snow_melted_agg_4, snow_add8 = snow_added_agg_8, snow_melt8 = snow_melted_agg_8,
-  
-                    )
-  
-  cat_vars <- c("date",          "cwb1",      "cwb2",      "cwb3",      "cwb6",      "cwb12",     "cwb24",    
-                    "cwb52",     "prec", "Tmin",          "Tmax",          "sun" ,     "snow_depth",    
-                    "rET",  "swe_tot","snow_add","snow_melt","swe_added","swe_melted",
-                    "swe_add4","swe_melt4","snow_add4","snow_melt4",
-                    "swe_add8","swe_melt8","snow_add8","snow_melt8")
+    df <- df %>% rename(date = Date, cwb1 = WB_1week, cwb2 = WB_2week, cwb3 = WB_3week, 
+                        
+                        cwb6 = WB_6week, cwb12 = WB_12week, cwb24 = WB_24week, cwb52 = WB_52week, 
+                        
+                        Tmin = Tmin, Tmax = Tmax, prec = precipitation, sun = sunshine, rET = rET, snow_melt = snow_melted, snow_add = snow_added,
+                        
+                        swe_melt = swe_melted, swe_add = swe_added,
+                        
+                        swe_add4 = swe_added_agg_4, swe_melt4 = swe_melted_agg_4, swe_add8 = swe_added_agg_8, swe_melt8 = swe_melted_agg_8,
+                        
+                        snow_add4 = snow_added_agg_4, snow_melt4 = snow_melted_agg_4, snow_add8 = snow_added_agg_8, snow_melt8 = snow_melted_agg_8,
+                        
+                        swe_add12 = swe_added_agg_12, swe_melt12 = swe_melted_agg_12,snow_add12 = snow_added_agg_12, snow_melt12 = snow_melted_agg_12
+    )
+    
+    cat_vars <- c("date",          "cwb1",      "cwb2",      "cwb3",      "cwb6",      "cwb12",     "cwb24",    
+                  "cwb52",     "prec", "Tmin",          "Tmax",          "sun" ,     "snow_depth",    
+                  "rET",  "swe_tot","snow_add","snow_melt","swe_add","swe_melt",
+                  "swe_add4","swe_melt4","snow_add4","snow_melt4",
+                  "swe_add8","swe_melt8","snow_add8","snow_melt8",
+                  "swe_add12","swe_melt12","snow_add12","snow_melt12")
+
   df_cat <- df  %>% select(cat_vars)
   df_cat <- df_cat %>%  rename_with(~ paste0(.x, "_cat"), .cols = -date) 
   
@@ -84,6 +92,32 @@ for(station in stations_list){
   
   
   load(file =  paste0("data/",station,"/Final_df_",station,"_weekly.RData"))
+  
+  df <- df %>% rename(date = Date, flow = flow_mean, cwb1 = WB_1week, cwb2 = WB_2week, cwb3 = WB_3week, 
+                      
+                      cwb6 = WB_6week, cwb12 = WB_12week, cwb24 = WB_24week, cwb52 = WB_52week, month = month, 
+                      
+                      year = year, week_year = week_year, week_tot = week_tot, Tmin = Tmin, Tmax = Tmax,
+                      
+                      prec = precipitation, sun = sunshine, rET = rET,   
+                      
+                      ao_last = AO_last, ao_mean = AO_mean, pna_last = PNA_last,
+                      
+                      pna_mean = PNA_mean, oni_last = ONI_last,  oni_mean = ONI_mean, soi_last = SOI_last, soi_mean = SOI_mean,     
+                      
+                      nao_mean = NAO_mean, flow_ma2 = flow_ma2, diff_ma2 = diff_ma2 ,    nao_last =  NAO_last,   
+                      
+                      flow_ma4 = flow_ma4,  diff_ma4 = diff_ma4,     flow_ma8 =  flow_ma8,   diff_ma8 =   diff_ma8,      
+                      
+                      deriv_1 = deriv_1,      deriv_2 = deriv_2,      flow_spline = flow_spline,
+                      
+                      snow_melt = snow_melted, snow_add = snow_added, swe_melt = swe_melted, swe_add = swe_added,
+                      
+                      swe_add4 = swe_added_agg_4, swe_melt4 = swe_melted_agg_4, swe_add8 = swe_added_agg_8, swe_melt8 = swe_melted_agg_8,
+                      
+                      snow_add4 = snow_added_agg_4, snow_melt4 = snow_melted_agg_4, snow_add8 = snow_added_agg_8, snow_melt8 = snow_melted_agg_8,
+                      
+                      swe_add12 = swe_added_agg_12, swe_melt12 = swe_melted_agg_12,snow_add12 = snow_added_agg_12, snow_melt12 = snow_melted_agg_12)
   
   
   #### Test models on forecasting on Leons data
@@ -106,91 +140,50 @@ for(station in stations_list){
   #                     week_cos_half = cos(week_year/(104/(2*pi)) -52 * 2 * pi /104))
   # 
   
-  x <- x %>% dplyr::select(all_of(c("Date","flow_mean", "WB_1week", "WB_2week", "WB_3week", 
+  x <- x %>% dplyr::select(all_of(c("date","flow", "cwb1", "cwb2", "cwb3", 
                                     
-                                    "WB_6week", "WB_12week","WB_24week","WB_52week", "month", "year", "week_year",
+                                    "cwb6", "cwb12","cwb24","cwb52", "month", "year", "week_year",
                                     
-                                    "week_tot","Tmin", "Tmax", "snow_depth", "precipitation", "sunshine", "rET", 
+                                    "week_tot","Tmin", "Tmax", "snow_depth", "prec", "sun", "rET", 
                                     
                                     # "week_hyd_sin", "week_sin_half" ,  "week_hyd_cos", "week_cos_half" ,
-                                    "AO_last",       "AO_mean",      
-                                    "PNA_last",      "PNA_mean",      "ONI_last",      "ONI_mean",      "SOI_last",      "SOI_mean",      "NAO_last",    
-                                    "NAO_mean",        "flow_ma2",      "diff_ma2" ,    
+                                    "ao_last",       "ao_mean",      
+                                    "pna_last",      "pna_mean",      "oni_last",      "oni_mean",      "soi_last",      "soi_mean",      "nao_last",    
+                                    "nao_mean",        "flow_ma2",      "diff_ma2" ,    
                                     "flow_ma4",      "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",       "flow_spline",
-                                    "swe_tot","snow_added","snow_melted","swe_added","swe_melted",
-                                    "swe_added_agg_4","swe_melted_agg_4","snow_added_agg_4","snow_melted_agg_4",
-                                    "swe_added_agg_8","swe_melted_agg_8","snow_added_agg_8","snow_melted_agg_8"  )))
+                                    "swe_tot","snow_add","snow_melt","swe_add","swe_melt",
+                                    "swe_add4","swe_melt4","snow_add4","snow_melt4",
+                                    "swe_add8","swe_melt8","snow_add8","snow_melt8",
+                                    "swe_add12","swe_melt12","snow_add12","snow_melt12")))
   
   x <- x %>% drop_na()
   
   
-  x <- x %>% rename(date = Date, flow = flow_mean, cwb1 = WB_1week, cwb2 = WB_2week, cwb3 = WB_3week, 
-                    
-                    cwb6 = WB_6week, cwb12 = WB_12week, cwb24 = WB_24week, cwb52 = WB_52week, month = month, 
-                   
-                    year = year, week_year = week_year, week_tot = week_tot, Tmin = Tmin, Tmax = Tmax,
-                    
-                    prec = precipitation, sun = sunshine, rET = rET,   
-                    
-                    ao_last = AO_last, ao_mean = AO_mean, pna_last = PNA_last,
-                    
-                    pna_mean = PNA_mean, oni_last = ONI_last,  oni_mean = ONI_mean, soi_last = SOI_last, soi_mean = SOI_mean,     
-                    nao_mean = NAO_mean, flow_ma2 = flow_ma2, diff_ma2 = diff_ma2 ,    nao_last =  NAO_last,   
-                    flow_ma4 = flow_ma4,  diff_ma4 = diff_ma4,     flow_ma8 =  flow_ma8,   diff_ma8 =   diff_ma8,      
-                    deriv_1 = deriv_1,      deriv_2 = deriv_2,      flow_spline = flow_spline)
-
-  
-  vn <- setdiff(names(x),c("date","nr.rm"))
+  vn <- setdiff(names(x),c("date","nr.rm"
+                           ,"month","week_year"))
   
   if(station == "Kienstock"){
     x <- left_join(x, df_cat, by = "date")
   }
   
  
-  #when defining the arguments in the "get_forecasts" function
-  # 
-  # vn <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month", 
-  #         
-  #         "year", "week_year","week_tot", "Tmin", "Tmax", "snow_depth", "prec", "sun", "rET",
-  #         "sin_month",   "cos_month","sin_week", "cos_week",
-  #         "ao_last",
-  #         "ao_mean",       "pna_last",      "pna_mean",      "oni_last",      "oni_mean",      
-  #         "soi_last",      "soi_mean",      "nao_last",   "nao_mean",      
-  #         "flow_ma2",      "diff_ma2" , "flow_ma4",      
-  #         "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2", 
-  #         "flow_spline" )
-  
-  
-  # setdiff(vn,vn_new)
-  
   if(station == "Kienstock"){
     vn <- c(vn, setdiff(names(df_cat),"date"))
   }
   
   vn_lagged <- c("flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12", "cwb24","cwb52",
                  
-                 "Tmin", "Tmax", "snow_depth", "prec", "sun", "rET", "flow_spline", "deriv_1", "deriv_2",
-                 "swe_tot","snow_added","snow_melted","swe_added","swe_melted",
-                 # "week_hyd_sin", "week_sin_half" ,  "week_hyd_cos", "week_cos_half" ,
-                 "swe_added_agg_4","swe_melted_agg_4","snow_added_agg_4","snow_melted_agg_4",
-                 "swe_added_agg_8","swe_melted_agg_8","snow_added_agg_8","snow_melted_agg_8")
-  
-  vn_interaction <- c("date", "flow", "cwb1", "cwb2", "cwb3", "cwb6", "cwb12","cwb24","cwb52", "month",
-                      
-                      "year", "week_year","week_tot", "Tmin", "Tmax", "snow_depth", "prec", "sun", "rET",
-                      # "sin_month",   "cos_month","sin_week", "cos_week",
-                      "ao_last", "swe_added","swe_melted","swe_tot",
-                      "ao_mean",       "pna_last",      "pna_mean",      "ONI_last",      "ONI_mean",
-                      "soi_last",      "soi_mean",      "npgo_last",   "npgo_mean",      "flow_min",
-                      "flow_ma2",      "diff_ma2" , "flow_ma4",
-                      "diff_ma4",      "flow_ma8",      "diff_ma8",      "deriv_1",       "deriv_2",
-                      "flow_spline" )
+                 "Tmin", "Tmax", "snow_depth", "prec",  "rET",
+                 "swe_tot","snow_add","snow_melt",
+                 "swe_add4","swe_melt4","snow_add4","snow_melt4",
+                 "swe_add8","swe_melt8","snow_add8","snow_melt8",
+                 "swe_add12","swe_melt12","snow_add12","snow_melt12")
   
   
   if(station == "Kienstock"){
-    vn_interaction <- intersect(vn_interaction, cat_vars) %>% 
+    vn_interaction <- intersect(interaction_terms, cat_vars) %>% 
       paste0(.,"_cat") %>% 
-      c(vn_interaction,.)
+      c(interaction_terms,.)
     
     vn_lagged <- intersect(vn_lagged, cat_vars) %>% 
       paste0(.,"_cat") %>% 
@@ -242,8 +235,9 @@ for(station in stations_list){
     {
       x <- x %>%
         mutate(season = case_when(
-          month %in% c(3:11) ~ "summer",
-          month %in% c(12,1,2) ~ "winter",
+          month %in% c(6:10) ~ "summer",
+          month %in% c(3:5) ~ "spring",
+          month %in% c(11,12,1,2) ~ "winter",
           TRUE ~ "other"
         ))
       x$season <- as.factor(x$season)
@@ -299,11 +293,11 @@ for(station in stations_list){
       
     {
       
-      x <- calculate_lags2(df = x, var = var_names_lagged, lags = 1:lags)
+      x <- calculate_lags2(df = x, var = var_names_lagged, lags = lags)
       
       ### Get additional variable names
       
-      var_add <- paste0(paste0(var_names_lagged, "_lag_"), seq(lags))
+      var_add <- paste0(paste0(var_names_lagged, "_lag_"), lags)
       
       var_names <- c(var_names, var_add)
       
@@ -382,17 +376,21 @@ for(station in stations_list){
     
     #### GLOBAL OPTIMIZATION OF LAMBDA ----
     
+    ## add interaction terms---- 
     if(seasonality == T)
       
     {
       
-      # xtrain <- xtrain %>%  select(-"date")
-      
       predictors <- setdiff(names(xtrain), c("y", "season"))  # avoid y and season * season
       
-      interaction_terms <- paste(predictors, "* season", collapse = " + ")
+      # interaction_terms<- paste(predictors, "* season", collapse = " + ")
       
-      formula <- as.formula(paste("y ~", interaction_terms, "+ season"))
+      interaction_predictors <- names(x)[grepl(paste(interaction_terms, collapse = "|"),names(x))]
+
+      interaction_terms_seasonality <- paste(interaction_predictors, "* season", collapse = " + ")
+      
+      formula <- as.formula(paste("y ~", paste(c(interaction_terms_seasonality,predictors), collapse = " + "), "+ season"))
+      
       if(interaction == "manual"){
         formula <- interactions_manual
       }
@@ -448,30 +446,6 @@ for(station in stations_list){
     
     coefs_global <- coefs_global %>% as.data.frame()
   
-    # 
-    # global_optimization_results %>% mutate(MSE_UB = MSE + MSESD) %>%
-    #   ggplot()+
-    #   geom_line(aes(x=log10(lambda), y = MSE))+
-    #   geom_line(aes(x=log10(lambda), y = MSE.1se), alpha = 1, linetype = "dotted", color = "red")+
-    #   geom_line(aes(x=log10(lambda), y = MAESD), color = "blue")+
-    #   geom_vline(xintercept = log10(lambda.1se), color = "forestgreen", linetype = "dotted",linewidth=1)+
-    #   geom_vline(xintercept = log10(lambda.min), color = "red", linetype = "dotted",linewidth=1)
-    # global_optimization_results %>% mutate(RMSE_UB = RMSE + RMSESD) %>%
-    #   ggplot()+
-    #   geom_line(aes(x=log10(lambda), y = RMSE))+
-    #   geom_line(aes(x=log10(lambda), y = RMSE.1se), alpha = 1, linetype = "dotted", color = "red")+
-    #   geom_line(aes(x=log10(lambda), y = MAESD), color = "blue")+
-    #   geom_vline(xintercept = log10(lambda.1se), color = "forestgreen", linetype = "dotted",linewidth=1)+
-    #   geom_vline(xintercept = log10(lambda.min), color = "red", linetype = "dotted",linewidth=1)
-    # global_optimization_results %>% mutate(MAE_UB = MAE + MAESD) %>%
-    #   ggplot()+
-    #   geom_line(aes(x=log10(lambda), y = MAE))+
-    #   geom_line(aes(x=log10(lambda), y = MAE.1se), alpha = 1, linetype = "dotted", color = "red")+
-    #   geom_line(aes(x=log10(lambda), y = MAESD), color = "blue")+
-    #   geom_vline(xintercept = log10(lambda.1se), color = "forestgreen", linetype = "dotted",linewidth=1)+
-    #   geom_vline(xintercept = log10(lambda.min), color = "red", linetype = "dotted",linewidth=1)
-    # 
-    
     
     ##### LOCAL OPTIMIZATION OF PREDICTOR COEFFICIENTS for fixed lambda
     
@@ -707,12 +681,12 @@ for(station in stations_list){
         horizon = h,
         var_names = vn,
         var_names_lagged = vn_lagged,
-        lags = 2,
+        lags = c(1,2,4,8,12),
         rolling_window = F, #T für meine, F für Johannes version
         diff_lag = F,
         temp_res = "week",
         stepsize = 50,
-        obj_fnct = "MSE",
+        obj_fnct = "RMSE",
         transform = "sqrt",
         seasonality = T,
         test_years = test_years_loop,
@@ -772,95 +746,22 @@ if (file.exists(paste0("results/",today,"/",model_name,"/",test_years_text,"/"))
   
 }  
 
-# 
-# h <- 1
-# lags <- 1
-# resp = "flow"
-# horizon = h
-# var_names = vn
-# var_names_lagged = vn_lagged
-# lags = 1
-# rolling_window = F #T für meine, F für Johannes version
-# diff_lag = FALSE
-# temp_res = "week"
-# stepsize = 50
-# obj_fnct = "MAE"
-# transform = "sqrt"
-# seasonality = F
-# test_years_loop <- 2015:2021
-# lambda_opt = "lambda.1se" #"lambda.1se" oder "lambda.min"
-# SE.factor = 1
-# seasonality = F
-# test_years = test_years_loop
 
-# 
-# load("results/2025-09-23/test_undiffed/2015_2021/test_undiffed_coefs_global_list_2015_2021.RData")
-# load("results/2025-09-23/test_undiffed/2015_2021/test_undiffed_results_2015_2021.RData")
-# 
-# coefs_df_all <- purrr::imap_dfr(coefs_global_list, ~ {
-#   
-#   station <- .y
-#   
-#   purrr::imap_dfr(.x, ~ {
-#     
-#     horizon_char <- .y
-#     
-#     df <- .x
-#     df <- df %>% 
-#       rownames_to_column(var = "variable") %>%  # explizit "variable" nennen
-#       rename(coefs = ".") %>%                   # "." Spalte in coefs umbenennen
-#       mutate(
-#         horizon_char = horizon_char,
-#         station = station
-#       )
-#     
-#     df
-#   })
-# })
-# 
-# 
-# coefs_df_all$fc_horizon <- stringr::str_remove(coefs_df_all$horizon, "fc_horizon_") %>%
-#   as.numeric()
-# 
-# coefs_df_all$n_horizon <- coefs_df_all$fc_horizon %>% 
-#   factor(levels = sort(unique(.)))
-# 
-# coefs_df_all$variable <- as.factor(coefs_df_all$variable)
-# 
-# coefs_df <- coefs_df_all %>% setDT() %>% 
-#   .[variable != "(Intercept)", c(.SD,.(coefs_rel = (abs(coefs)*100)/(sum(abs(coefs))) ) ), by = fc_horizon]
-# 
-# top_coefs <- coefs_df_all%>% setDT() %>% 
-#   .[variable != "(Intercept)", .(coefs = sum(abs(coefs))), by = variable]
-# 
-# top_coefs <- top_coefs %>%  arrange(desc(coefs))
-# 
-# top_coefs <- top_coefs$variable[1:15]
-# 
-# png(file=paste0("results/",today,"/",model_name,"/coefficients/",model_name,"_coefs_bars_all_fc-h_",s,"_",fc_years,".png"),
-#     width = 1000, height = 600, units = "px")
-# 
-# plot <- coefs_df %>%
-#   filter(variable %in% top_coefs) %>%
-#   mutate(variable = factor(variable, levels = top_coefs)) %>% 
-#   ggplot(aes(x = n_horizon, y = coefs, fill = n_horizon)) +
-#   geom_col(color = "black", width = 0.9) +
-#   facet_wrap(~variable, scales = "fixed", ncol = 5, nrow = 3) +
-#   labs(
-#     x = "Forecasting Horizon",
-#     y = "Coefficient of Predictors",
-#     fill = "Forecasting Horizon",
-#     title = paste0("Station: | Absolute Importance of 20 Most Important Predictor Variables in ",model_name,"_"),
-#     subtitle = paste0(Sys.time())
-#   ) +
-#   theme_minimal(base_size = 14) +  # Set base font size
-#   geom_hline(yintercept = 0)+
-#   theme(
-#     axis.title = element_text(size = 16, face = "bold"),
-#     axis.text = element_text(size = 12),
-#     strip.text = element_text(size = 14, face = "bold"),  # Facet titles
-#     legend.position = "bottom"
-#   )
-# 
-# # scale_x_discrete(breaks = n_horizon)
-# print(plot)
+h <- 1
+lags <- c(1,2,4,8,12)
+resp = "flow"
+horizon = h
+var_names = vn
+var_names_lagged = vn_lagged
+rolling_window = F #T für meine, F für Johannes version
+diff_lag = FALSE
+temp_res = "week"
+stepsize = 50
+obj_fnct = "MAE"
+transform = "sqrt"
+seasonality = F
+test_years_loop <- 2015:2021
+lambda_opt = "lambda.1se" #"lambda.1se" oder "lambda.min"
+SE.factor = 1
+seasonality = T
+test_years = test_years_loop

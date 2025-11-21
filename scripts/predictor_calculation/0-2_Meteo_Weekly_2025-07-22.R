@@ -318,7 +318,11 @@ for (s in c("Tauchenbach","Kienstock","Flattach","Uttendorf","Kienstock_Catchmen
                                           snow_added_agg_8 =rollsum(snow_added, 8, align = "right", na.pad = T),
                                           snow_melted_agg_8 = rollsum(snow_added, 8, align = "right", na.pad = T),
                                           swe_added_agg_8 = rollsum(snow_added, 8, align = "right", na.pad = T),
-                                          swe_melted_agg_8 = rollsum(snow_added, 8, align = "right", na.pad = T))
+                                          swe_melted_agg_8 = rollsum(snow_added, 8, align = "right", na.pad = T),
+                                          snow_added_agg_12 =rollsum(snow_added, 12, align = "right", na.pad = T),
+                                          snow_melted_agg_12 = rollsum(snow_added, 12, align = "right", na.pad = T),
+                                          swe_added_agg_12 = rollsum(snow_added, 12, align = "right", na.pad = T),
+                                          swe_melted_agg_12 = rollsum(snow_added, 12, align = "right", na.pad = T))
   
   
   # Meteo_Weekly[which(Meteo_Weekly, is.na = T),]

@@ -18,8 +18,8 @@ library(scales)
 rm(list=ls())
 
 # today <- Sys.Date()-5
-today <- as.Date("2025-10-24")
-model_name <- c("no_seasonality")
+today <- as.Date("2025-11-14")
+model_name <- c("sqrt_interaction_no_seas")
 stations_list <- c("Tauchenbach","Kienstock","Uttendorf","Flattach")
 fc_years_list <- list(2015:2016
                       ,2003:2004
@@ -69,6 +69,21 @@ for(s in unique(hist_fc_df_all$station)){
   
   
 }
+
+colors_models <- thematic::okabe_ito(8)
+
+color_legend <- data.frame(y = rep(1,8), x = 1:8, c = c("a","b","c","d","e","f","g","h"))
+color_legend %>%
+  ggplot()+
+  geom_col(aes(x = x, y = y, fill = c))+
+  scale_fill_manual(values = c("a" = colors_models[1],
+                    "b" = colors_models[2],
+                    "c" = colors_models[3],
+                    "d" = colors_models[4],
+                    "e" = colors_models[5],
+                    "f" = colors_models[6],
+                    "g" = colors_models[7],
+                    "h" = colors_models[8]))
 
 # Seasonality in Climate Variables Plot (Flow vs. Snow, ETP, Prec)----
 # 
@@ -235,6 +250,7 @@ for(s in unique(hist_fc_df_all$station)){
 
 # Calculate Drought Objects ----
 
+
 calculate_drought_objects <-
   function(data,
            quantiles_all,
@@ -332,128 +348,115 @@ grey_events <- grey_events %>% select(c("date",  "discharge" ,
 grey_events <- grey_events[event.no != 0, .(duration = .N,
                                             def.vol = sum(def.increase),
                                             qmin = min(discharge),
-                                            start_month = lubridate::month(first(date)),
+                                            # start_month = lubridate::month(first(date)),
                                             start_date = first(date)), by = .(event.no,station)]
 grey_events <- grey_events %>% mutate(severity = (def.vol/duration))
-grey_events$seasonality <- 0.5*sin( ((grey_events$start_month-4)*pi/6)) +0.5
+# grey_events$seasonality <- 0.5*sin( ((grey_events$start_month-4)*pi/6)) +0.5
 
-# Plot for Grey Fingerprints ----
-  # ### map the empty plot
-  # circle_coords <- function(r, n_axis = ncol(data) - 1){
-  #   fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
-  #   x <- r*cos(fi)
-  #   y <- r*sin(fi)
-  #   
-  #   tibble(x, y, r)
-  # }
-  # 
-  # central_distance <- 0.2
-  # 
-  # map <- map_df(seq(0, 1, 0.25) + central_distance, circle_coords) %>%
-  #   ggplot(aes(x, y)) +
-  #   geom_polygon(data = circle_coords(1 + central_distance), 
-  #                alpha = alpha_map, fill = "gray97") +
-  #   geom_path(aes(group = r), lty = linetype_grid, alpha = 0.1) +
-  #   theme_void()
-  # 
-  # # calculate coordinates for the axis
-  # axis_coords <- function(n_axis){
-  #   fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2
-  #   x1 <- central_distance*cos(fi)
-  #   y1 <- central_distance*sin(fi)
-  #   x2 <- (1 + central_distance)*cos(fi)
-  #   y2 <- (1 + central_distance)*sin(fi)
-  #   
-  #   tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
-  # }
-  # 
-  # axis <- geom_line(data = axis_coords(ncol(data) - 1), 
-  #                   aes(x, y, group = id), alpha = 0.3)
-  # map + axis
-  # 
-  # # plot the data 
-  # axis_name_offset <- 0.2
-  # rescaled_coords <- function(r, n_axis){
-  #   # fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
-  #   fi <- seq(0, 2 * pi, length.out = n_axis + 1) + pi/2#
-  #   
-  #   tibble(r, fi) %>% mutate(x = r*cos(fi), y = r*sin(fi)) %>% select(-fi)
-  # }
-  # 
-  # text_data <- data %>%
-  #   select(-start_date) %>%
-  #   map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
-  #   mutate(r = seq(0, 1, 0.25)) %>%
-  #   pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
-  #   mutate(value = round(value, digits = 2))
-  # 
-  # text_coords <- function(r, n_axis = ncol(data) - 1){
-  #   fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
-  #   x <- r*cos(fi)
-  #   y <- r*sin(fi)
-  #   
-  #   tibble(x, y, r = r - central_distance)
-  # }
-  # 
-  # labels_data <- map_df(seq(0, 1, 0.25) + central_distance, text_coords) %>%
-  #   bind_cols(text_data %>% select(-r))
-  # 
-  # map + axis + 
-  #   geom_text(data = labels_data, aes(x, y, label = value), alpha = 0.65) +
-  #   geom_text(data = text_coords(1 + central_distance + 0.2), 
-  #             aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)])
-  # 
-  # rescaled_data <- data %>% 
-  #   # mutate(across(-c(station,horizon,fc_method), rescale)) %>%
-  #   mutate(copy = pull(., 1)) %>%
-  #   pivot_longer(-c(start_date), names_to = "parameter", values_to = "value") %>%
-  #   group_by(start_date) %>%
-  #   mutate(coords = rescaled_coords(value + central_distance, ncol(data) - 1)) %>%
-  #   unnest(cols = c(coords)) 
-  # 
-  # drawings <- map+axis + 
-  #   geom_point(data = rescaled_data, 
-  #              aes(x, y, group = start_date), col = "grey", 
-  #              size = 3) +
-  #   geom_path(data = rescaled_data, 
-  #             aes(x, y, group = start_date, col = "grey", 
-  #             size = 1)+
-  #   geom_polygon(data = rescaled_data, 
-  #                aes(x, y, group = start_date),
-  #                    col = "grey", fill = "grey"), 
-  #                size = 1, alpha = 0.1, show.legend = FALSE) +
-  #   geom_text(data = labels_data,
-  #             aes(x, y, label = value), alpha = 0.65) +
-  #   geom_text(data = text_coords(1 + central_distance + axis_name_offset),
-  #             aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)]) +
-  #   labs(col = "steelblue") +
-  #   theme_void()
-  # 
+#transform absolute Qmin values of observed events into their relative magnitute compared to the stations Q80 flow
+grey_events <- quantiles_all %>%  filter(exceed_prob == 80 & fc_period == "2015_2021") %>% select(-exceed_prob) %>% 
+  left_join(grey_events,., by = c("station")) %>% rename(Q80 = quant_flow)
+
+grey_events <- quantiles_all %>%  filter(exceed_prob == 50 & fc_period == "2015_2021") %>% select(-exceed_prob) %>% 
+  left_join(grey_events,., by = c("station"))%>% rename(Q50 = quant_flow)
+
+grey_events$min_flow_index <- 1-(grey_events$qmin/grey_events$Q80)
 
 
+historic_events <- data.frame(station = c("Tauchenbach","Kienstock","Flattach","Uttendorf",
+                                          "Tauchenbach","Kienstock","Flattach","Uttendorf"),
+                              start_date = c(as.Date(c("2003-03-30","2003-10-26","2006-01-01","2008-10-19",
+                                                       "2015-08-02","2015-08-30","2017-01-29","2016-02-21"))))
+historic_events$historic_event <- c(rep("event_1",4),rep("event_2",4))
+grey_events <- left_join(grey_events, historic_events, by = c("start_date","station"))
+grey_events$historic_event[which(is.na(grey_events$historic_event)==T)] <- "grey_event"
 
+percentiles <- grey_events %>% 
+  group_by(station) %>% 
+  summarize(severity = quantile(severity, probs = c(0.1)),
+            min_flow_index = quantile(min_flow_index, probs = 0.1),
+            duration = quantile(duration, probs = 0.1),
+            qmin = quantile(qmin, probs = 0.1),
+            def.vol = quantile(def.vol, probs = 0.1),
+            start_date = as.Date("2025-11-18")) %>% 
+  mutate(historic_event = "Q10")
 
+percentiles <- grey_events %>% 
+  group_by(station) %>% 
+  summarize(severity = quantile(severity, probs = c(0.5)),
+            min_flow_index = quantile(min_flow_index, probs = 0.5),
+            duration = quantile(duration, probs = 0.5),
+            qmin = quantile(qmin, probs = 0.5),
+            def.vol = quantile(def.vol, probs = 0.5),
+            start_date = as.Date("2025-11-19")) %>% 
+  mutate(historic_event = "median") %>% rbind(.,percentiles)
 
+percentiles <- grey_events %>% 
+  group_by(station) %>% 
+  summarize(severity = quantile(severity, probs = c(0.9)),
+            min_flow_index = quantile(min_flow_index, probs = 0.9),
+            duration = quantile(duration, probs = 0.9),
+            qmin = quantile(qmin, probs = 0.9),
+            def.vol = quantile(def.vol, probs = 0.9),
+            start_date = as.Date("2025-11-20")) %>% 
+  mutate(historic_event = "Q90") %>% rbind(.,percentiles)
 
-  
-  
+percentiles <- quantiles_all %>%  filter(exceed_prob == 80 & fc_period == "2015_2021") %>% select(-exceed_prob) %>% 
+  left_join(percentiles,., by = c("station")) %>% rename(Q80 = "quant_flow")
+percentiles <- quantiles_all %>%  filter(exceed_prob == 50 & fc_period == "2015_2021") %>% select(-exceed_prob) %>% 
+  left_join(percentiles,., by = c("station"))%>% rename(Q50 = "quant_flow")
+
+grey_events <- rbind(grey_events,percentiles, fill = T) 
+
+grey_events_global <- grey_events
+grey_events_global$def.vol_index <- grey_events_global$def.vol/grey_events$Q50
+grey_events_global$severity_index <- grey_events_global$def.vol_index/grey_events_global$duration
+grey_events_global <- grey_events_global %>% mutate(min_flow_index = min_flow_index/max(min_flow_index),
+                                             duration = duration/max(duration), 
+                                             def.vol_index = def.vol_index/max(def.vol_index),
+                                             severity_index = severity_index/max(severity_index))
+
+grey_events_local <- grey_events
+grey_events_local$def.vol_index <- grey_events_local$def.vol/grey_events_local$Q50
+grey_events_local$severity_index <- grey_events_local$def.vol_index/grey_events_local$duration
+
+grey_events_local <- grey_events_local %>% group_by(station) %>% 
+  mutate(min_flow_index = (min_flow_index/max(min_flow_index)),
+         duration = (duration/max(duration)), 
+         def.vol_index = def.vol_index/max(def.vol_index),
+         severity_index = severity_index/max(severity_index)) %>% 
+  ungroup() %>% 
+  select(station,min_flow_index,def.vol_index,severity_index,historic_event,duration,start_date)
+
+#FINGERPRINT PLOT - EINORDNUNG ANEKDOTAL EVENTS----
+
 axis_name_offset <-  0.2
 central_distance = 0.05
 fill_alpha = 0.1
 linetype_grid = 1
 alpha_map = 0.01
 
+event_einordnung <- function(data_all,axis_name_offset,
+                             central_distance,
+                             fill_alpha,
+                             linetype_grid,
+                             alpha_map){
 drawings_all <- NULL
   
-  for (s in unique(grey_events$station)) {
+  for (s in c("Tauchenbach","Kienstock","Uttendorf","Flattach")) {
     
-  data <- grey_events
+  data <- data_all
   # data <- data %>% filter(station == "Tauchenbach")
-  data <- data %>% filter(station == s & duration > 30)
-  data <- data %>% select(qmin, def.vol, duration, severity, start_month, start_date)
-  data <- data %>% select(qmin, def.vol, duration, severity, start_date)
+  data <- data %>% filter(station == s 
+                          # & duration > temp
+                          )
   
-  params <- setdiff(names(data), c("start_date"))
+  temp <- quantile(data$duration, probs = 0.2)
+
+  data <- data %>% select(min_flow_index, start_date,def.vol_index, duration, severity_index,historic_event)
+  # data <- data %>% select(min_flow_index, def.vol, duration, severity, start_date,historic_event)
+  
+  params <- setdiff(names(data), c("historic_event","start_date"))
   k <- length(params)
   
   data_scaled <- data %>%
@@ -478,13 +481,13 @@ drawings_all <- NULL
     ungroup()
   
   text_data <- data %>%
-    select(-start_date) %>%
+    select(-c(start_date,historic_event)) %>%
     map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
     mutate(r = seq(0, 1, 0.25)) %>%
     pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
     mutate(value = round(value, digits = 2))
   
-  text_coords <- function(r, n_axis = ncol(data) - 1){
+  text_coords <- function(r, n_axis = ncol(data) - 2){
     fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
     x <- r*cos(fi)
     y <- r*sin(fi)
@@ -496,7 +499,7 @@ drawings_all <- NULL
     bind_cols(text_data %>% select(-r))
   
   
-  circle_coords <- function(r, n_axis = ncol(data) - 1){
+  circle_coords <- function(r, n_axis = ncol(data) - 2){
     fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
     x <- r*cos(fi)
     y <- r*sin(fi)
@@ -505,11 +508,11 @@ drawings_all <- NULL
   }
   
   
-  map <- map_df(seq(0, 1, 0.25) + central_distance, circle_coords) %>%
+  map <- map_df(seq(0, 1, 1) + central_distance, circle_coords) %>% #adjust the number of lines in the map by the 3rd seq argument
     ggplot(aes(x, y)) +
     geom_polygon(data = circle_coords(1 + central_distance), 
-                 alpha = alpha_map, fill = "gray97") +
-    geom_path(aes(group = r), lty = linetype_grid, alpha = 0.1) +
+                 alpha = alpha_map, fill = "grey") +
+    geom_path(aes(group = r), lty = linetype_grid, alpha = 0.3) +
     theme_void()
   
   # calculate coordinates for the axis
@@ -523,60 +526,384 @@ drawings_all <- NULL
     tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
   }
   
-  axis <- geom_line(data = axis_coords(ncol(data) - 1), 
+  axis <- geom_line(data = axis_coords(ncol(data) - 2), 
                     aes(x, y, group = id), alpha = 0.3)
   map + axis
   
   drawings <- map + axis + 
-    geom_point(data = plot_df, aes(x, y, group = start_date),
-               color = "grey50", size = 1.8, show.legend = FALSE) +
-    # geom_path(data = plot_df, aes(x, y, group = start_date),
-    #           color = "grey50", linewidth = 0.6, show.legend = FALSE) +
-    geom_polygon(data = plot_df, aes(x, y, group = start_date),
-                 fill = "grey70", alpha = 0.05, color = NA, show.legend = FALSE)+
+    # geom_point(data = plot_df, aes(x, y, group = start_date),
+    #            color = "grey50", size = 1.8, show.legend = FALSE, alpha = 0.3) +
+    geom_path(data = plot_df, aes(x, y, group = start_date, color = historic_event,linewidth = historic_event),
+               show.legend = FALSE) +
+    # geom_polygon(data = plot_df, aes(x, y, group = start_date),
+    #              fill = "grey70", alpha = 0.1, color = NA, show.legend = FALSE)+
     # geom_text(data = labels_data,
     #           aes(x, y, label = value), alpha = 0.65) +
     geom_text(data = text_coords(1 + central_distance + axis_name_offset),
-              aes(x, y), label = labels_data$parameter[1:(ncol(data)-1)]) +
-    labs(subtitle = paste0("Station ",s, " | n = ",nrow(data)))
-  
+              aes(x, y), label = labels_data$parameter[1:(ncol(data)-2)]) +
+    labs(subtitle = paste0("Station ",s, " | n = ",nrow(data)))+
+    
+    scale_color_manual(
+      values = c("grey_event" = colors_models[5],
+                 "event_1" = colors_models[3],
+                 "event_2" = colors_models[1]),
+      name = "Legend")+
+    scale_linewidth_manual(values = c("grey_event" = 0.3,
+                                      "event_1" = 1,
+                                      "event_2" = 1),
+                           name = "Legend")
+
   drawings_all[[paste0(s)]] <- drawings
+  
+  }
+
+  plot <- drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  print(plot)
+}
+
+# event_einordnung_local <- drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  
+event_einordnung(data_all = grey_events_local,axis_name_offset,
+                 central_distance,
+                 fill_alpha,
+                 linetype_grid,
+                 alpha_map)
+
+#FINGERPRINT PLOT - EINORDNUNG MEDIAN Q90/Q10----
+
+axis_name_offset <-  0.2
+central_distance = 0.05
+fill_alpha = 0.1
+linetype_grid = 1
+alpha_map = 0.01
+
+event_einordnung_percentiles <- function(data_all,axis_name_offset,
+                             central_distance,
+                             fill_alpha,
+                             linetype_grid,
+                             alpha_map){
+  drawings_all <- NULL
+  
+  for (s in c("Tauchenbach","Kienstock","Uttendorf","Flattach")) {
+    
+    data <- data_all
+    # data <- data %>% filter(station == "Tauchenbach")
+    data <- data %>% filter(station == s 
+                            & !historic_event %in% c("event_1","event_2","grey_event")
+                            # & duration > temp
+    )
+    
+    temp <- quantile(data$duration, probs = 0.2)
+    
+    data <- data <- data %>% 
+      select(
+        min_flow_index,
+        def.vol_index,
+        duration,
+        severity_index,
+        start_date,
+        historic_event
+      )
+    # data <- data %>% select(min_flow_index, def.vol, duration, severity, start_date,historic_event)
+    temp <- data.frame(min_flow_index = rep(1,4),
+                       def.vol_index = rep(1,4),
+                       severity_index = rep(1,4),
+                       duration = rep(1,4),
+                       start_date = as.Date("2025-06-07"),
+                       historic_event = "border")
+    data <- rbind(data,temp)
+    
+    params <- c("min_flow_index","def.vol_index","duration","severity_index")
+    k <- length(params)
+    
+    data_scaled <- data %>%
+      mutate(across(all_of(params), ~ scales::rescale(., to = c(0,1))))
+
+    # angle lookup per parameter (fixed order)
+    angles <- tibble(
+      parameter = params,
+      fi = seq(0, 2*pi, length.out = k + 1)[1:k] + pi/2
+    )
+    
+    # long + coordinates
+    plot_df <- data_scaled %>%
+      pivot_longer(all_of(params), names_to = "parameter", values_to = "value") %>%
+      left_join(angles, by = "parameter") %>%
+      mutate(r = central_distance + value,
+             x = r * cos(fi),
+             y = r * sin(fi)) %>%
+      arrange(start_date, fi) %>%
+      group_by(start_date) %>%
+      group_modify(~ bind_rows(.x, .x[1,])) %>%
+      ungroup()
+    
+    text_data <- data %>%
+      select(-c(start_date,historic_event)) %>%
+      map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
+      mutate(r = seq(0, 1, 0.25)) %>%
+      pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
+      mutate(value = round(value, digits = 2))
+    
+    text_coords <- function(r, n_axis = ncol(data) - 2){
+      fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
+      x <- r*cos(fi)
+      y <- r*sin(fi)
+      
+      tibble(x, y, r = r - central_distance)
+    }
+    
+    labels_data <- map_df(seq(0, 1, 0.25) + central_distance, text_coords) %>%
+      bind_cols(text_data %>% select(-r))
+    
+    
+    circle_coords <- function(r, n_axis = ncol(data) - 2){
+      fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
+      x <- r*cos(fi)
+      y <- r*sin(fi)
+      
+      tibble(x, y, r)
+    }
+    
+    
+    map <- map_df(seq(0, 1, 1) + central_distance, circle_coords) %>% #adjust the number of lines in the map by the 3rd seq argument
+      ggplot(aes(x, y)) +
+      geom_polygon(data = circle_coords(1 + central_distance), 
+                   alpha = alpha_map, fill = "grey") +
+      geom_path(aes(group = r), lty = linetype_grid, alpha = 0.3) +
+      theme_void()
+    
+    # calculate coordinates for the axis
+    axis_coords <- function(n_axis){
+      fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2
+      x1 <- central_distance*cos(fi)
+      y1 <- central_distance*sin(fi)
+      x2 <- (1 + central_distance)*cos(fi)
+      y2 <- (1 + central_distance)*sin(fi)
+      
+      tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
+    }
+    
+    axis <- geom_line(data = axis_coords(ncol(data) - 2), 
+                      aes(x, y, group = id), alpha = 0.3)
+    map + axis
+    
+    drawings <- map + axis + 
+      # geom_point(data = plot_df, aes(x, y, group = start_date),
+      #            color = "grey50", size = 1.8, show.legend = FALSE, alpha = 0.3) +
+      geom_path(data = plot_df, aes(x, y, group = start_date, color = historic_event,linewidth = historic_event),
+                show.legend = FALSE) +
+      # geom_polygon(data = plot_df, aes(x, y, group = start_date),
+      #              fill = "grey70", alpha = 0.1, color = NA, show.legend = FALSE)+
+      # geom_text(data = labels_data,
+      #           aes(x, y, label = value), alpha = 0.65) +
+      geom_text(data = text_coords(1 + central_distance + axis_name_offset),
+                aes(x, y), label = labels_data$parameter[1:(ncol(data)-2)]) +
+      labs(subtitle = paste0("Station ",s, " | n = ",nrow(data)))+
+
+      scale_color_manual(
+        values = c("grey_event" = colors_models[5],
+                   "Q90" = colors_models[6],
+                   "median" = colors_models[1],
+                   "Q10" = colors_models[2]),
+        name = "Legend")+
+      scale_linewidth_manual(values = c("grey_event" = 0.3,
+                                        "Q90" = 1,
+                                        "Q10" = 1,
+                                        "median" = 1),
+                             name = "Legend")
+    
+    drawings_all[[paste0(s)]] <- drawings
+    
   }
   
-drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  plot <- drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  print(plot)
+}
+
+
+
+event_einordnung_percentiles(data_all = grey_events_global,axis_name_offset,
+                 central_distance,
+                 fill_alpha,
+                 linetype_grid,
+                 alpha_map)
+
+test <- grey_events_local %>% filter(historic_event %in% c("Q90","Q10","median") &
+                                        station == "Tauchenbach")
+
+# FINGERPRINT - VERLGEICH OBS PRED EVENTS ----
+
+axis_name_offset <-  0.2
+central_distance = 0.05
+fill_alpha = 0.1
+linetype_grid = 1
+alpha_map = 0.01
+
+event_einordnung <- function(data_all,axis_name_offset,
+                             central_distance,
+                             fill_alpha,
+                             linetype_grid,
+                             alpha_map){
+  drawings_all <- NULL
   
+  for (s in c("Tauchenbach","Kienstock","Uttendorf","Flattach")) {
+    
+    data <- data_all
+    # data <- data %>% filter(station == "Tauchenbach")
+    data <- data %>% filter(station == s 
+                            # & duration > temp
+    )
+    
+    temp <- quantile(data$duration, probs = 0.2)
+    
+    data <- data %>% select(min_flow_index, start_date,def.vol_index, duration, severity_index,historic_event)
+    # data <- data %>% select(min_flow_index, def.vol, duration, severity, start_date,historic_event)
+    
+    params <- setdiff(names(data), c("historic_event","start_date"))
+    k <- length(params)
+    
+    data_scaled <- data %>%
+      mutate(across(all_of(params), ~ scales::rescale(., to = c(0,1))))
+    
+    # angle lookup per parameter (fixed order)
+    angles <- tibble(
+      parameter = params,
+      fi = seq(0, 2*pi, length.out = k + 1)[1:k] + pi/2
+    )
+    
+    # long + coordinates
+    plot_df <- data_scaled %>%
+      pivot_longer(all_of(params), names_to = "parameter", values_to = "value") %>%
+      left_join(angles, by = "parameter") %>%
+      mutate(r = central_distance + value,
+             x = r * cos(fi),
+             y = r * sin(fi)) %>%
+      arrange(start_date, fi) %>%
+      group_by(start_date) %>%
+      group_modify(~ bind_rows(.x, .x[1,])) %>%
+      ungroup()
+    
+    text_data <- data %>%
+      select(-c(start_date,historic_event)) %>%
+      map_df(~ min(.) + (max(.) - min(.)) * seq(0, 1, 0.25)) %>%
+      mutate(r = seq(0, 1, 0.25)) %>%
+      pivot_longer(-r, names_to = "parameter", values_to = "value") %>% 
+      mutate(value = round(value, digits = 2))
+    
+    text_coords <- function(r, n_axis = ncol(data) - 2){
+      fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2 + 0.01*2*pi/r
+      x <- r*cos(fi)
+      y <- r*sin(fi)
+      
+      tibble(x, y, r = r - central_distance)
+    }
+    
+    labels_data <- map_df(seq(0, 1, 0.25) + central_distance, text_coords) %>%
+      bind_cols(text_data %>% select(-r))
+    
+    
+    circle_coords <- function(r, n_axis = ncol(data) - 2){
+      fi <- seq(0, 2*pi, (1/n_axis)*2*pi) + pi/2
+      x <- r*cos(fi)
+      y <- r*sin(fi)
+      
+      tibble(x, y, r)
+    }
+    
+    
+    map <- map_df(seq(0, 1, 1) + central_distance, circle_coords) %>% #adjust the number of lines in the map by the 3rd seq argument
+      ggplot(aes(x, y)) +
+      geom_polygon(data = circle_coords(1 + central_distance), 
+                   alpha = alpha_map, fill = "grey") +
+      geom_path(aes(group = r), lty = linetype_grid, alpha = 0.3) +
+      theme_void()
+    
+    # calculate coordinates for the axis
+    axis_coords <- function(n_axis){
+      fi <- seq(0, (1 - 1/n_axis)*2*pi, (1/n_axis)*2*pi) + pi/2
+      x1 <- central_distance*cos(fi)
+      y1 <- central_distance*sin(fi)
+      x2 <- (1 + central_distance)*cos(fi)
+      y2 <- (1 + central_distance)*sin(fi)
+      
+      tibble(x = c(x1, x2), y = c(y1, y2), id = rep(1:n_axis, 2))
+    }
+    
+    axis <- geom_line(data = axis_coords(ncol(data) - 2), 
+                      aes(x, y, group = id), alpha = 0.3)
+    map + axis
+    
+    drawings <- map + axis + 
+      # geom_point(data = plot_df, aes(x, y, group = start_date),
+      #            color = "grey50", size = 1.8, show.legend = FALSE, alpha = 0.3) +
+      geom_path(data = plot_df, aes(x, y, group = start_date, color = historic_event,linewidth = historic_event),
+                show.legend = FALSE) +
+      # geom_polygon(data = plot_df, aes(x, y, group = start_date),
+      #              fill = "grey70", alpha = 0.1, color = NA, show.legend = FALSE)+
+      # geom_text(data = labels_data,
+      #           aes(x, y, label = value), alpha = 0.65) +
+      geom_text(data = text_coords(1 + central_distance + axis_name_offset),
+                aes(x, y), label = labels_data$parameter[1:(ncol(data)-2)]) +
+      labs(subtitle = paste0("Station ",s, " | n = ",nrow(data)))+
+      
+      scale_color_manual(
+        values = c("grey_event" = "grey",
+                   "event_1" = "darkred",
+                   "event_2" = "forestgreen"),
+        name = "Legend")+
+      scale_linewidth_manual(values = c("grey_event" = 0.3,
+                                        "event_1" = 1,
+                                        "event_2" = 1),
+                             name = "Legend")
+    
+    drawings_all[[paste0(s)]] <- drawings
+    
+  }
+  
+  plot <- drawings_all[["Tauchenbach"]] / drawings_all[["Kienstock"]] - drawings_all[["Flattach"]]  / drawings_all[["Uttendorf"]] 
+  print(plot)
+}
 
+
+# DER REST -----
+
+# setDT(hist_fc_df_all)
+# load(file = (paste0("results/",today,"/",model_name,"/forecast_df_complete.RData")))
 # 
-# test <- data.frame(months = seq(1,12,1))
+# forecast_df_complete_long <- forecast_df_complete %>% rename(catchment_memory = pred) %>% select(-fc_method) %>%
+#   pivot_longer(cols = c(catchment_memory, naive_season,naive_lag,ensemble_median,upper_benchmark),
+#                values_to = "flow",names_to = "fc_method") %>% mutate(pred_obs = "pred_obs")
 # 
-# test$seasonality <- 0.5*sin( ((test$months-4)*pi/6)) +0.5
-# test %>% ggplot()+
-#   geom_line(aes(x=months,y = seasonality))+
-#   scale_x_continuous(breaks = seq(1,12,1))
-
-setDT(hist_fc_df_all)
-
-drought_objects <-
-  hist_fc_df_all[, calculate_drought_objects(.SD,
-                                             quantiles_all,
-                                             ratio_pooling = 0.1,
-                                             tmin_pooling = 14),
-                 by = .(station, fc_method, horizon, fc_period,pred_obs),
-                 .SDcols = c("date", "flow", "station", "fc_method", "horizon", "fc_period","pred_obs")]
-
-data <- drought_objects %>% select(c("date",  "discharge" ,       
-                                     "threshold",    "def.increase", 
-                                     "event.no", "event.orig")) 
-
-data$fc_method <- drought_objects$fc_method
-data$fc_period <- drought_objects$fc_period
-data$station <- drought_objects$station
-data$horizon <- drought_objects$horizon
-data$pred_obs <- drought_objects$pred_obs
+# forecast_df_complete_long <- forecast_df_complete_long %>% select(-c(fc_method,flow)) %>% distinct() %>% 
+#   mutate(fc_method = "observed",flow = obs) %>% 
+#   rbind(.,forecast_df_complete_long)
+# 
+# drought_objects <-
+#   forecast_df_complete_long %>% setDT() %>% .[, calculate_drought_objects(.SD,
+#                                              quantiles_all,
+#                                              ratio_pooling = 0.1,
+#                                              tmin_pooling = 14),
+#                  by = .(station, fc_method, horizon, fc_period,pred_obs),
+#                  .SDcols = c("date", "flow", "station", "fc_method", "horizon", "fc_period","pred_obs")]
+# 
+# data <- drought_objects %>% select(c("date",  "discharge" ,
+#                                      "threshold",    "def.increase",
+#                                      "event.no", "event.orig"))
+# 
+# data$fc_method <- drought_objects$fc_method
+# data$fc_period <- drought_objects$fc_period
+# data$station <- drought_objects$station
+# data$horizon <- drought_objects$horizon
+# data$pred_obs <- drought_objects$pred_obs
+# 
+# drought_objects <- data
+# 
+# save(drought_objects, file = (paste0("results/",today,"/",model_name,"/drought_object.RData")))
+load(file = (paste0("results/",today,"/",model_name,"/drought_object.RData")))
 
 # Confustion matrix/ Contingency Table - Precision / Recall ----
 
-wide_confusion <- data %>%
+wide_confusion <- drought_objects %>%
   pivot_wider(
     id_cols     = all_of(c("date","station","fc_method","fc_period","horizon","threshold")),    
     names_from  = pred_obs,
@@ -599,8 +926,39 @@ confusion_df <- confusion_df %>% mutate(precision = TP/(TP+FP),
 confusion_df[is.na(confusion_df)] <- 0
 
 #Evaluating predicted Drought Event characteristics ----
+test <- drought_objects %>% setDT() %>% .[, .(start = min(date),
+                                              end = last(date)), by = fc_method]
+test <- data.frame(sapply(c("catchment_memory", "naive_season", "naive_lag", "ensemble_median","upper_benchmark"),
+       function(x){
+  obs <- drought_objects %>% filter(fc_method == "observed") %>% mutate(pred_obs = "obs")
+  pred <- drought_objects %>% filter(fc_method == x) %>% mutate(pred_obs = "pred")
+  comb <- rbind(obs,pred)
+  comb <- comb %>%
+    setDT() %>%
+    .[, `:=`(
+      start    = fifelse(event.no > 0, first(date), as.Date(NA)),
+      end      = fifelse(event.no > 0, last(date),  as.Date(NA)),
+      duration = fifelse(event.no > 0, as.integer(last(date) - first(date) + 1), 0),
+      date     = date,
+      def.vol      = fifelse(event.no > 0, sum(def.increase),  NA),
+      qmin      = fifelse(event.no > 0, min(discharge),  NA)),
+      by = .(station, fc_method, horizon, fc_period,event.no,pred_obs)]
 
-data <- data %>%
+  wide <- comb %>%
+    pivot_wider(
+      id_cols     = all_of(c("date","station","fc_method","fc_period","horizon","threshold")),    
+      names_from  = pred_obs,
+      values_from =  c(event.no, discharge, def.increase, event.orig,start,end,duration,qmin,def.increase,def.vol),
+      names_prefix = "") 
+  return(wide)
+}))
+
+
+
+drought_objects_pred_obs <- drought_objects
+
+
+data <- drought_objects %>%
   setDT() %>%
   .[, `:=`(
     start    = fifelse(event.no > 0, first(date), as.Date(NA)),
@@ -621,8 +979,6 @@ wide <- data %>%
     # values_fill = 0                      # fehlende als 0 statt NA
   ) 
 
-
-#
 wide <- wide %>% setDT() %>% 
   .[, `:=` (start_pred = na.locf(start_pred, fromLast = TRUE, na.rm = F),
             end_pred = na.locf(end_pred, fromLast = TRUE, na.rm = F))
@@ -640,6 +996,11 @@ plot_data_wide <- wide
 
 wide <- wide %>% filter(event.no_obs != 0)
 
+wide <- quantiles_all %>% filter(exceed_prob == 80) %>% select(Q80 = quant_flow,station,fc_period) %>% 
+  left_join(wide, . , by = c("station","fc_period"))
+wide <- quantiles_all %>% filter(exceed_prob == 50) %>% select(Q50 = quant_flow,station,fc_period) %>% 
+  left_join(wide, . , by = c("station","fc_period"))
+
 pred_obs_diff <- wide %>% setDT() %>% 
   .[event.no_obs != 0 &
       start_obs < fcase(
@@ -650,6 +1011,11 @@ pred_obs_diff <- wide %>% setDT() %>%
            duration_diff = duration_pred - duration_obs,
            qmin_diff = qmin_pred - qmin_obs,
            def.vol_diff = sum(def.increase_pred) - sum(def.increase_obs),
+           # start_diff_index = as.numeric((start_pred - start_obs) / duration_obs),
+           # duration_diff_index = (duration_pred - duration_obs) / duration_obs,
+           # qmin_diff_index = (qmin_pred - qmin_obs) / Q80,
+           # def.vol_diff_index = (sum(def.increase_pred) - sum(def.increase_obs)) / (Q50*60*60*24*7),
+           # severity_diff_index = (ifelse(duration_pred == 0,0,(sum(def.increase_pred)/duration_pred)) - (sum(def.increase_obs)/duration_obs)) / (Q50*60*60*24*7),
            event_name = paste0(unique(station)," | ",
                                unique(fc_method)," | ",
                                unique(fc_period)," | ",
@@ -662,19 +1028,16 @@ pred_obs_diff <- wide %>% setDT() %>%
 
 pred_obs_diff <- pred_obs_diff %>% distinct()
 
-pred_obs_diff <- quantiles_all %>% filter(exceed_prob == 80) %>% select(Q80 = quant_flow,station,fc_period) %>% 
-  left_join(pred_obs_diff, . , by = c("station","fc_period"))
-pred_obs_diff <- quantiles_all %>% filter(exceed_prob == 50) %>% select(Q50 = quant_flow,station,fc_period) %>% 
-  left_join(pred_obs_diff, . , by = c("station","fc_period"))
-
-pred_obs_diff$def.vol_diff_mean_perc = (pred_obs_diff$def.vol_diff/(pred_obs_diff$Q80*60*60*24*pred_obs_diff$duration_obs))*100
+# pred_obs_diff$def.vol_diff_mean_perc = (pred_obs_diff$def.vol_diff/(pred_obs_diff$Q80*60*60*24*pred_obs_diff$duration_obs))*100
 
 #def.vol_diff_perc = durchschnittliche abweichung zwischen vorhergesagtem und beobachtetem defizitvolumen
 #wie viel prozent des Q80-Flows wurde jeden Tag für das Event Falsch vorhergesagt
 
-pred_obs_diff$def.vol_diff_rel = (pred_obs_diff$def.vol_diff/(pred_obs_diff$Q80))
+# pred_obs_diff$def.vol_diff_rel = (pred_obs_diff$def.vol_diff/(pred_obs_diff$Q80))
 
-pred_obs_diff <- pred_obs_diff %>% mutate(start_diff = as.numeric(start_diff))
+# pred_obs_diff <- pred_obs_diff %>% mutate(start_diff = as.numeric(start_diff))
+
+names(pred_obs_diff)
 
 
 ## Skill Scores based on Upper BM performance ----
@@ -683,8 +1046,15 @@ skill_scores <- pred_obs_diff %>% select(horizon, fc_method, station, fc_period,
                                          start_diff, 
                                          duration_diff,
                                          qmin_diff,
-                                         def.vol_diff) 
+                                         def.vol_diff,
+                                         start,
+                                         event_name) 
+test <- skill_scores %>% filter(start == as.Date("2015-12-27") & 
+                                  horizon == 1)
+test <- wide %>% filter(date == as.Date("2015-12-27") & 
+                                  horizon == 1)
 
+  
 skill_scores <- skill_scores %>% setDT() %>%
   .[, .(n_events = .N,
         start_diff = as.numeric(median(start_diff)),
